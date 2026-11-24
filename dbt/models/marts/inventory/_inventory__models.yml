@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: fct_inventory_daily_snapshot
+    description: Periodic snapshot of on-hand inventory, product x store x day. Balances are semi-additive.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [date_key, product_key, store_key]
+  - name: fct_inventory_transactions
+    columns:
+      - name: movement_id
+        data_tests: [unique, not_null]
+  - name: dim_inventory_movement_type
+    columns:
+      - name: inventory_movement_type_key
+        data_tests: [unique]

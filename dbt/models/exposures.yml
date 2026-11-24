@@ -1,0 +1,14 @@
+version: 2
+
+exposures:
+  - name: merchandising_dashboard
+    label: Merchandising Performance Dashboard
+    type: dashboard
+    maturity: medium
+    description: Weekly category and promotion performance reviewed by merchandising.
+    depends_on:
+      - ref('fct_retail_sales')
+      - ref('fct_promotion_coverage')
+      - ref('agg_sales_monthly_category_store')
+    owner:
+      name: Merchandising Analytics

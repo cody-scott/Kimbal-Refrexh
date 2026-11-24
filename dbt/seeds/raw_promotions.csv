@@ -1,0 +1,6 @@
+promo_code,promo_name,price_reduction_type,ad_type,display_type,coupon_type,start_date,end_date
+PRM-NEWYEAR,New Year Gear Up,Percent Off,Email,End Cap,None,2025-01-01,2025-01-15
+PRM-WINTER,Winter Clearance,Percent Off,Print,Aisle,None,2025-02-01,2025-02-28
+PRM-SPRING,Spring Trail Days,Dollar Off,Social,End Cap,Mobile,2025-04-01,2025-04-20
+PRM-MEMBER,Member Weekend,Percent Off,Email,None,Loyalty,2025-05-23,2025-05-26
+PRM-SUMMER,Summer Camp Kickoff,Bundle,TV,Floor Stack,Paper,2025-06-10,2025-06-30

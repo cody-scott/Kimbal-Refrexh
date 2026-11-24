@@ -1,0 +1,9 @@
+version: 2
+
+models:
+  - name: bridge_customer_interest
+    description: Multivalued bridge, customer to interests, with weighting factors summing to 1 per customer.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [customer_durable_key, interest_key]

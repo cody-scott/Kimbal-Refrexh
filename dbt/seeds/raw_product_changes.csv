@@ -1,0 +1,7 @@
+sku,changed_at,attribute_name,old_value,new_value
+SKU-1006,2025-02-15 09:00:00,category,Camp Kitchen,Fuel & Consumables
+SKU-2004,2025-03-01 09:00:00,category,Footwear,Socks & Accessories
+SKU-3004,2025-03-01 09:00:00,department,Apparel,Accessories
+SKU-1001,2025-04-10 09:00:00,brand,Ridgeline,Ridgeline Pro
+SKU-2003,2025-05-01 09:00:00,list_price,189.00,199.00
+SKU-1006,2025-05-20 09:00:00,package_size,Each,2-Pack

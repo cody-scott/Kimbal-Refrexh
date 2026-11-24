@@ -1,0 +1,19 @@
+account_id,account_name,parent_account_id,account_type
+1000,Assets,,Asset
+1100,Cash,1000,Asset
+1200,Inventory,1000,Asset
+2000,Liabilities,,Liability
+2100,Accounts Payable,2000,Liability
+4000,Revenue,,Revenue
+4100,Store Revenue,4000,Revenue
+4110,Store Merchandise Revenue,4100,Revenue
+4120,Store Services Revenue,4100,Revenue
+4200,Web Revenue,4000,Revenue
+5000,Expenses,,Expense
+5100,Cost of Goods Sold,5000,Expense
+5200,Operating Expenses,5000,Expense
+5210,Payroll,5200,Expense
+5220,Rent,5200,Expense
+5221,Store Rent,5220,Expense
+5222,DC Rent,5220,Expense
+5230,Marketing,5200,Expense

@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: fct_procurement_transactions
+    description: All procurement transaction types in one fact table, typed by dim_procurement_transaction_type.
+  - name: fct_po_line_pipeline
+    description: Accumulating snapshot, one row per PO line, updated as milestones are reached.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [po_number, po_line_number]
+  - name: dim_procurement_transaction_type
+    columns:
+      - name: procurement_transaction_type_key
+        data_tests: [unique]

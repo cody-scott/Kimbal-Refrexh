@@ -1,0 +1,27 @@
+customer_id,changed_at,attribute_name,old_value,new_value
+C0001,2025-01-25 10:00:00,loyalty_tier,Silver,Gold
+C0010,2025-02-13 10:00:00,loyalty_tier,Basic,Silver
+C0013,2025-03-28 10:00:00,city,Portland,Boise
+C0013,2025-03-28 10:00:00,state,OR,ID
+C0014,2025-06-04 10:00:00,loyalty_tier,Basic,Silver
+C0017,2025-01-25 10:00:00,city,Eugene,Denver
+C0017,2025-01-25 10:00:00,state,OR,CO
+C0019,2025-01-28 10:00:00,loyalty_tier,Basic,Silver
+C0025,2025-05-29 10:00:00,city,Seattle,Eugene
+C0025,2025-05-29 10:00:00,state,WA,OR
+C0028,2025-03-12 10:00:00,city,Boise,Denver
+C0028,2025-03-12 10:00:00,state,ID,CO
+C0030,2025-01-31 10:00:00,loyalty_tier,Silver,Gold
+C0032,2025-04-01 10:00:00,city,Seattle,Denver
+C0032,2025-04-01 10:00:00,state,WA,CO
+C0036,2025-04-28 10:00:00,loyalty_tier,Silver,Gold
+C0043,2025-06-04 10:00:00,loyalty_tier,Basic,Silver
+C0045,2025-03-15 10:00:00,loyalty_tier,Basic,Silver
+C0046,2025-03-18 10:00:00,city,Eugene,Salt Lake City
+C0046,2025-03-18 10:00:00,state,OR,UT
+C0047,2025-01-21 10:00:00,loyalty_tier,Basic,Silver
+C0051,2025-05-19 10:00:00,loyalty_tier,Silver,Gold
+C0054,2025-01-29 10:00:00,city,Eugene,Boulder
+C0054,2025-01-29 10:00:00,state,OR,CO
+C0057,2025-05-26 10:00:00,city,Boise,Denver
+C0057,2025-05-26 10:00:00,state,ID,CO

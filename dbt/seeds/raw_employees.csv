@@ -1,0 +1,15 @@
+employee_id,employee_name,job_title,manager_employee_id,department,hire_date,home_store_id
+E001,Taylor Brooks,CEO,,Executive,2014-01-01,
+E002,Morgan Silva,VP Retail,E001,Retail Ops,2015-02-01,
+E003,Jordan Patel,VP Digital,E001,Digital,2016-03-01,
+E004,Avery Chen,Regional Director NW,E002,Retail Ops,2015-03-01,
+E005,Casey Nguyen,Regional Director Mountain,E002,Retail Ops,2017-04-01,
+E006,Riley Okafor,Store Manager,E004,Retail Ops,2016-09-01,103
+E007,Skyler Ito,Store Manager,E004,Retail Ops,2018-06-15,102
+E008,Parker Novak,Store Manager,E005,Retail Ops,2019-10-01,202
+E009,Rowan Rossi,Sales Associate,E006,Retail Ops,2021-05-01,103
+E010,Emerson Singh,Sales Associate,E006,Retail Ops,2022-07-11,103
+E011,Hayden Walsh,Sales Associate,E007,Retail Ops,2023-01-09,102
+E012,Logan Dubois,Sales Associate,E008,Retail Ops,2023-03-20,202
+E013,Kendall Moreno,Ecommerce Manager,E003,Digital,2020-02-03,999
+E014,Peyton Fischer,Analyst,E013,Digital,2024-08-19,999

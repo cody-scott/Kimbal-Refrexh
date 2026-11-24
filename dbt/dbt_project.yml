@@ -1,0 +1,48 @@
+name: kimball_lab
+version: "1.0.0"
+config-version: 2
+require-dbt-version: [">=1.10.5", "<2.0.0"]
+
+profile: kimball_lab
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # The window the date dimension covers. Kimball: build the date dimension
+  # well beyond the facts you have today (it's tiny; there is no reason to skimp).
+  date_dim_start: "2020-01-01"
+  date_dim_end: "2030-12-31"
+  # Kimball "unknown member" convention: every dimension carries a row the
+  # fact table can point at when the real member is missing or not yet known.
+  unknown_key: "'-1'"
+
+seeds:
+  kimball_lab:
+    +schema: raw
+    +quote_columns: false
+
+models:
+  kimball_lab:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+      +persist_docs: {relation: true, columns: true}
+      scd_lab:
+        +schema: scd_lab
+
+snapshots:
+  kimball_lab:
+    +target_schema: snapshots

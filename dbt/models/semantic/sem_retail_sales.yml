@@ -1,0 +1,77 @@
+version: 2
+
+# The dbt Semantic Layer sits ON TOP of a Kimball star: the semantic model
+# declares the fact table's grain (entities), its dimensions and measures.
+# MetricFlow then writes the joins, so every tool gets the same number.
+semantic_models:
+  - name: retail_sales
+    description: Retail POS sales at the transaction-line grain.
+    model: ref('fct_retail_sales')
+    defaults:
+      agg_time_dimension: transaction_date
+    entities:
+      - name: sales_line
+        type: primary
+        expr: transaction_id || '-' || line_number
+      - name: product
+        type: foreign
+        expr: product_key
+      - name: store
+        type: foreign
+        expr: store_key
+      - name: customer
+        type: foreign
+        expr: customer_key
+    dimensions:
+      - name: transaction_date
+        type: time
+        type_params: {time_granularity: day}
+    measures:
+      - {name: sales_quantity, agg: sum}
+      - {name: net_sales, agg: sum, expr: extended_net_sales_amount}
+      - {name: gross_profit, agg: sum, expr: extended_gross_profit_amount}
+      - {name: transaction_count, agg: count_distinct, expr: transaction_id}
+
+  - name: products
+    model: ref('dim_product')
+    entities:
+      - {name: product, type: primary, expr: product_key}
+    dimensions:
+      - {name: category, type: categorical}
+      - {name: department, type: categorical}
+      - {name: brand, type: categorical}
+
+  - name: stores
+    model: ref('dim_store')
+    entities:
+      - {name: store, type: primary, expr: store_key}
+    dimensions:
+      - {name: store_region, type: categorical}
+      - {name: store_name, type: categorical}
+
+metrics:
+  - name: net_sales
+    label: Net Sales
+    type: simple
+    type_params: {measure: net_sales}
+  - name: gross_profit
+    label: Gross Profit
+    type: simple
+    type_params: {measure: gross_profit}
+  - name: gross_margin_pct
+    label: Gross Margin %
+    description: Ratio metric. Never average a stored percentage; divide the sums.
+    type: ratio
+    type_params:
+      numerator: gross_profit
+      denominator: net_sales
+  - name: average_basket_value
+    label: Average Basket Value
+    type: ratio
+    type_params:
+      numerator: net_sales
+      denominator: {name: transactions}
+  - name: transactions
+    label: Transactions
+    type: simple
+    type_params: {measure: transaction_count}

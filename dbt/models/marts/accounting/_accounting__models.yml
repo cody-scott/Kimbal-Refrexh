@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: dim_account
+    columns:
+      - name: account_key
+        data_tests: [unique, not_null]
+  - name: bridge_account_hierarchy
+    description: Ancestor/descendant pairs for the ragged chart of accounts.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [ancestor_account_key, descendant_account_key]
+  - name: fct_gl_monthly_balance
+    description: Periodic snapshot. ending_balance_amount is semi-additive.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [month_end_date_key, account_key, store_key]
+  - name: fct_budget_vs_actual
+    description: Consolidated fact table, account x month.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [month_end_date_key, account_key]

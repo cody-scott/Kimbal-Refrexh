@@ -1,0 +1,61 @@
+customer_id,first_name,last_name,email,birth_date,city,state,loyalty_tier,annual_income,updated_at
+C0001,Sam,Novak,customer0001@example.com,1969-11-20,Salt Lake City,UT,Gold,120000,2025-01-25 10:00:00
+C0002,Jamie,Clarke,customer0002@example.com,1996-04-22,Denver,CO,Basic,45000,2024-12-01 00:00:00
+C0003,Drew,Kim,customer0003@example.com,1975-04-06,Salt Lake City,UT,Silver,45000,2024-12-01 00:00:00
+C0004,Quinn,Rossi,customer0004@example.com,1994-04-01,Eugene,OR,Silver,25000,2024-12-01 00:00:00
+C0005,Reese,Romero,customer0005@example.com,1977-01-15,Tacoma,WA,Basic,65000,2024-12-01 00:00:00
+C0006,Skyler,Johnson,customer0006@example.com,1987-01-30,Boulder,CO,Silver,25000,2024-12-01 00:00:00
+C0007,Parker,Singh,customer0007@example.com,1984-01-20,Boise,ID,Basic,85000,2024-12-01 00:00:00
+C0008,Rowan,Tanaka,customer0008@example.com,1984-10-05,Tacoma,WA,Silver,120000,2024-12-01 00:00:00
+C0009,Emerson,Haddad,customer0009@example.com,1985-11-24,Boulder,CO,Basic,25000,2024-12-01 00:00:00
+C0010,Hayden,Walsh,customer0010@example.com,1989-08-30,Seattle,WA,Silver,65000,2025-02-13 10:00:00
+C0011,Logan,Olsen,customer0011@example.com,1998-05-14,Tacoma,WA,Basic,25000,2024-12-01 00:00:00
+C0012,Kendall,Mbeki,customer0012@example.com,1972-06-20,Salt Lake City,UT,Silver,65000,2024-12-01 00:00:00
+C0013,Peyton,Dubois,customer0013@example.com,1976-08-09,Boise,ID,Silver,45000,2025-03-28 10:00:00
+C0014,Blake,Byrne,customer0014@example.com,1991-06-25,Denver,CO,Silver,120000,2025-06-04 10:00:00
+C0015,Cameron,Larsen,customer0015@example.com,1983-12-17,Portland,OR,Basic,45000,2024-12-01 00:00:00
+C0016,Dakota,Moreno,customer0016@example.com,1977-01-07,Boise,ID,Silver,120000,2024-12-01 00:00:00
+C0017,Finley,Costa,customer0017@example.com,1990-09-16,Denver,CO,Silver,25000,2025-01-25 10:00:00
+C0018,Harper,Ito,customer0018@example.com,1996-11-11,Eugene,OR,Basic,65000,2024-12-01 00:00:00
+C0019,Jesse,Fischer,customer0019@example.com,1972-01-04,Salt Lake City,UT,Silver,45000,2025-01-28 10:00:00
+C0020,Alex,Garcia,customer0020@example.com,1969-07-15,Boulder,CO,Silver,85000,2024-12-01 00:00:00
+C0021,Sam,Novak,customer0021@example.com,1966-05-29,Boise,ID,Silver,45000,2024-12-01 00:00:00
+C0022,Jamie,Clarke,customer0022@example.com,1993-06-01,Eugene,OR,Silver,120000,2024-12-01 00:00:00
+C0023,Drew,Kim,customer0023@example.com,1986-03-05,Salt Lake City,UT,Silver,65000,2024-12-01 00:00:00
+C0024,Quinn,Rossi,customer0024@example.com,1966-03-16,Eugene,OR,Silver,25000,2024-12-01 00:00:00
+C0025,Reese,Romero,customer0025@example.com,1998-08-17,Eugene,OR,Basic,45000,2025-05-29 10:00:00
+C0026,Skyler,Johnson,customer0026@example.com,1995-07-13,Portland,OR,Silver,120000,2024-12-01 00:00:00
+C0027,Parker,Singh,customer0027@example.com,1977-04-05,Tacoma,WA,Silver,120000,2024-12-01 00:00:00
+C0028,Rowan,Tanaka,customer0028@example.com,1983-09-26,Denver,CO,Silver,120000,2025-03-12 10:00:00
+C0029,Emerson,Haddad,customer0029@example.com,1990-07-07,Seattle,WA,Basic,120000,2024-12-01 00:00:00
+C0030,Hayden,Walsh,customer0030@example.com,1994-06-23,Denver,CO,Gold,25000,2025-01-31 10:00:00
+C0031,Logan,Olsen,customer0031@example.com,1979-07-03,Denver,CO,Basic,85000,2024-12-01 00:00:00
+C0032,Kendall,Mbeki,customer0032@example.com,1992-05-22,Denver,CO,Silver,120000,2025-04-01 10:00:00
+C0033,Peyton,Dubois,customer0033@example.com,1982-10-09,Portland,OR,Basic,65000,2024-12-01 00:00:00
+C0034,Blake,Byrne,customer0034@example.com,1966-11-09,Eugene,OR,Silver,45000,2024-12-01 00:00:00
+C0035,Cameron,Larsen,customer0035@example.com,1986-11-13,Seattle,WA,Silver,85000,2024-12-01 00:00:00
+C0036,Dakota,Moreno,customer0036@example.com,1965-01-06,Seattle,WA,Gold,65000,2025-04-28 10:00:00
+C0037,Finley,Costa,customer0037@example.com,1962-08-07,Eugene,OR,Basic,120000,2024-12-01 00:00:00
+C0038,Harper,Ito,customer0038@example.com,1963-11-04,Tacoma,WA,Silver,25000,2024-12-01 00:00:00
+C0039,Jesse,Fischer,customer0039@example.com,1965-10-04,Portland,OR,Silver,120000,2024-12-01 00:00:00
+C0040,Alex,Garcia,customer0040@example.com,1971-11-21,Portland,OR,Silver,45000,2024-12-01 00:00:00
+C0041,Sam,Novak,customer0041@example.com,1991-12-24,Eugene,OR,Silver,85000,2024-12-01 00:00:00
+C0042,Jamie,Clarke,customer0042@example.com,1979-08-26,Boulder,CO,Silver,25000,2024-12-01 00:00:00
+C0043,Drew,Kim,customer0043@example.com,1970-01-29,Eugene,OR,Silver,65000,2025-06-04 10:00:00
+C0044,Quinn,Rossi,customer0044@example.com,1986-05-22,Seattle,WA,Basic,120000,2024-12-01 00:00:00
+C0045,Reese,Romero,customer0045@example.com,1960-04-27,Eugene,OR,Silver,25000,2025-03-15 10:00:00
+C0046,Skyler,Johnson,customer0046@example.com,1963-01-09,Salt Lake City,UT,Basic,65000,2025-03-18 10:00:00
+C0047,Parker,Singh,customer0047@example.com,1983-01-23,Tacoma,WA,Silver,65000,2025-01-21 10:00:00
+C0048,Rowan,Tanaka,customer0048@example.com,1969-08-11,Boise,ID,Basic,120000,2024-12-01 00:00:00
+C0049,Emerson,Haddad,customer0049@example.com,1970-11-25,Boise,ID,Silver,85000,2024-12-01 00:00:00
+C0050,Hayden,Walsh,customer0050@example.com,1964-03-25,Eugene,OR,Basic,85000,2024-12-01 00:00:00
+C0051,Logan,Olsen,customer0051@example.com,1978-12-31,Boulder,CO,Gold,85000,2025-05-19 10:00:00
+C0052,Kendall,Mbeki,customer0052@example.com,1990-03-16,Seattle,WA,Basic,25000,2024-12-01 00:00:00
+C0053,Peyton,Dubois,customer0053@example.com,1992-08-31,Salt Lake City,UT,Silver,25000,2024-12-01 00:00:00
+C0054,Blake,Byrne,customer0054@example.com,1968-08-05,Boulder,CO,Basic,120000,2025-01-29 10:00:00
+C0055,Cameron,Larsen,customer0055@example.com,1966-04-15,Boise,ID,Silver,45000,2024-12-01 00:00:00
+C0056,Dakota,Moreno,customer0056@example.com,1980-10-01,Denver,CO,Basic,25000,2024-12-01 00:00:00
+C0057,Finley,Costa,customer0057@example.com,1996-03-30,Denver,CO,Basic,25000,2025-05-26 10:00:00
+C0058,Harper,Ito,customer0058@example.com,1964-03-08,Seattle,WA,Basic,45000,2024-12-01 00:00:00
+C0059,Jesse,Fischer,customer0059@example.com,1981-10-13,Salt Lake City,UT,Silver,45000,2024-12-01 00:00:00
+C0060,Alex,Garcia,customer0060@example.com,1962-08-18,Salt Lake City,UT,Basic,85000,2024-12-01 00:00:00

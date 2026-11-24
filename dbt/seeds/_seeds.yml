@@ -1,0 +1,79 @@
+version: 2
+
+# Seeds stand in for the raw tables a loader (Fivetran, Airbyte, Snowpipe...)
+# would land in Snowflake. Explicit column types keep Snowflake from guessing.
+seeds:
+  - name: raw_products
+    config:
+      column_types: {list_price: "number(10,2)", standard_cost: "number(10,2)", updated_at: timestamp_ntz}
+  - name: raw_product_changes
+    config:
+      column_types: {changed_at: timestamp_ntz, old_value: varchar, new_value: varchar}
+  - name: raw_stores
+    config:
+      column_types: {store_id: integer, opened_date: date}
+  - name: raw_promotions
+    config:
+      column_types: {start_date: date, end_date: date}
+  - name: raw_promotion_coverage
+    config:
+      column_types: {coverage_date: date, store_id: integer}
+  - name: raw_customers
+    config:
+      column_types: {birth_date: date, annual_income: integer, updated_at: timestamp_ntz}
+  - name: raw_customer_changes
+    config:
+      column_types: {changed_at: timestamp_ntz, old_value: varchar, new_value: varchar}
+  - name: raw_customer_interests
+  - name: raw_employees
+    config:
+      column_types: {hire_date: date, manager_employee_id: varchar, home_store_id: varchar}
+  - name: raw_employee_events
+    config:
+      column_types: {event_date: date, store_id: varchar}
+  - name: raw_pos_transactions
+    config:
+      column_types:
+        transaction_id: integer
+        line_number: integer
+        store_id: integer
+        customer_id: varchar
+        promo_code: varchar
+        quantity: integer
+        unit_price: "number(10,2)"
+        discount_amount: "number(10,2)"
+        unit_cost: "number(10,2)"
+        transaction_ts: timestamp_ntz
+  - name: raw_inventory_daily
+    config:
+      column_types: {snapshot_date: date, store_id: integer, quantity_on_hand: integer, unit_cost: "number(10,2)", unit_list_price: "number(10,2)"}
+  - name: raw_inventory_movements
+    config:
+      column_types: {movement_date: date, store_id: integer, quantity: integer, unit_cost: "number(10,2)"}
+  - name: raw_vendors
+  - name: raw_procurement_transactions
+    config:
+      column_types: {transaction_date: date, quantity: integer, unit_cost: "number(10,2)"}
+  - name: raw_fx_rates
+    config:
+      column_types: {rate_date: date, exchange_rate: "number(12,6)"}
+  - name: raw_web_orders
+    config:
+      column_types:
+        order_ts: timestamp_ntz
+        shipping_charge: "number(10,2)"
+        shipped_date: date
+        delivered_date: date
+        returned_date: date
+  - name: raw_web_order_lines
+    config:
+      column_types: {quantity: integer, unit_price_local: "number(10,2)", discount_local: "number(10,2)", unit_cost_usd: "number(10,2)"}
+  - name: raw_gl_accounts
+    config:
+      column_types: {account_id: varchar, parent_account_id: varchar}
+  - name: raw_gl_journal_lines
+    config:
+      column_types: {posting_date: date, account_id: varchar, store_id: integer, amount: "number(14,2)"}
+  - name: raw_gl_budget
+    config:
+      column_types: {budget_month: date, account_id: varchar, budget_amount: "number(14,2)"}

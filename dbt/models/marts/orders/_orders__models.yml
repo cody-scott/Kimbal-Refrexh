@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: fct_order_lines
+    description: Web order line transaction fact with allocated shipping and dual currency.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_number, line_number]
+    columns:
+      - name: order_profile_key
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_order_profile'), field: order_profile_key}}
+      - name: ship_date_key
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_date'), field: date_key}}
+
+  - name: fct_order_fulfillment
+    description: Accumulating snapshot, one row per order across its life cycle.
+    columns:
+      - name: order_number
+        data_tests: [unique, not_null]
+
+  - name: dim_order_profile
+    description: Junk dimension of order-level flags.
+    columns:
+      - name: order_profile_key
+        data_tests: [unique, not_null]
+
+unit_tests:
+  - name: test_shipping_allocation_ties_to_header
+    description: Allocated shipping sums to the header charge, with the remainder on the last line.
+    model: int_order_lines_allocated
+    given:
+      - input: ref('stg_cascade__web_order_lines')
+        rows:
+          - {order_number: 1, line_number: 1, sku: A, quantity: 1, unit_price_local: 10.00, discount_local: 0, unit_cost_usd: 1}
+          - {order_number: 1, line_number: 2, sku: B, quantity: 1, unit_price_local: 10.00, discount_local: 0, unit_cost_usd: 1}
+          - {order_number: 1, line_number: 3, sku: C, quantity: 1, unit_price_local: 10.00, discount_local: 0, unit_cost_usd: 1}
+      - input: ref('stg_cascade__web_orders')
+        rows:
+          - {order_number: 1, shipping_charge_local: 10.00}
+    expect:
+      rows:
+        - {order_number: 1, line_number: 1, allocated_shipping_local: 3.33}
+        - {order_number: 1, line_number: 2, allocated_shipping_local: 3.33}
+        - {order_number: 1, line_number: 3, allocated_shipping_local: 3.34}

@@ -1,0 +1,17 @@
+sku,product_name,brand,subcategory,category,department,package_size,list_price,standard_cost,updated_at
+SKU-1001,Trailblazer 2P Tent,Ridgeline Pro,Backpacking Tents,Tents,Camping,Each,349.00,180.00,2025-04-10 09:00:00
+SKU-1002,Basecamp 6P Tent,Ridgeline,Car Camping Tents,Tents,Camping,Each,499.00,260.00,2024-12-01 00:00:00
+SKU-1003,Ember 20F Sleeping Bag,Northfork,Down Bags,Sleeping Bags,Camping,Each,289.00,140.00,2024-12-01 00:00:00
+SKU-1004,Drift 40F Sleeping Bag,Northfork,Synthetic Bags,Sleeping Bags,Camping,Each,129.00,60.00,2024-12-01 00:00:00
+SKU-1005,Summit Stove,Alpenglow,Canister Stoves,Camp Kitchen,Camping,Each,79.00,35.00,2024-12-01 00:00:00
+SKU-1006,Fuel Canister 8oz,Alpenglow,Fuel,Fuel & Consumables,Camping,2-Pack,7.50,3.00,2025-05-20 09:00:00
+SKU-2001,Granite 65L Pack,Switchback,Backpacking Packs,Packs,Hiking,Each,279.00,130.00,2024-12-01 00:00:00
+SKU-2002,Daytripper 22L Pack,Switchback,Daypacks,Packs,Hiking,Each,99.00,45.00,2024-12-01 00:00:00
+SKU-2003,Ridge Runner Boot,Talus,Hiking Boots,Footwear,Hiking,Pair,199.00,90.00,2025-05-01 09:00:00
+SKU-2004,Wool Hiking Socks,Talus,Socks,Socks & Accessories,Hiking,3-Pack,24.00,9.00,2025-03-01 09:00:00
+SKU-3001,Stormshell Jacket,Cirrus,Rain Jackets,Outerwear,Apparel,Each,229.00,105.00,2024-12-01 00:00:00
+SKU-3002,Loft Puffy Jacket,Cirrus,Insulated Jackets,Outerwear,Apparel,Each,199.00,92.00,2024-12-01 00:00:00
+SKU-3003,Merino Base Layer,Cirrus,Base Layers,Layers,Apparel,Each,89.00,38.00,2024-12-01 00:00:00
+SKU-3004,Trail Cap,Cirrus,Headwear,Accessories,Accessories,Each,28.00,10.00,2025-03-01 09:00:00
+SKU-4001,Headlamp 400,Lumen,Headlamps,Lighting,Accessories,Each,45.00,18.00,2024-12-01 00:00:00
+SKU-4002,Water Filter,Clearbrook,Filters,Hydration,Accessories,Each,39.00,15.00,2024-12-01 00:00:00

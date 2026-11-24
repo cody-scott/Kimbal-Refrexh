@@ -1,0 +1,97 @@
+version: 2
+
+# Staging tests protect the assumptions the dimensional layer relies on:
+# natural keys are unique, and codes the marts join on actually exist.
+models:
+  - name: stg_cascade__products
+    description: Current state of each product (one row per SKU).
+    columns:
+      - name: sku
+        data_tests: [unique, not_null]
+  - name: stg_cascade__product_changes
+    description: Attribute-level change log for products.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [sku, changed_at, attribute_name]
+  - name: stg_cascade__stores
+    columns:
+      - name: store_id
+        data_tests: [unique, not_null]
+  - name: stg_cascade__promotions
+    columns:
+      - name: promo_code
+        data_tests: [unique, not_null]
+  - name: stg_cascade__promotion_coverage
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [coverage_date, store_id, sku, promo_code]
+  - name: stg_cascade__customers
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+  - name: stg_cascade__customer_changes
+  - name: stg_cascade__customer_interests
+  - name: stg_cascade__employees
+    columns:
+      - name: employee_id
+        data_tests: [unique, not_null]
+  - name: stg_cascade__employee_events
+  - name: stg_cascade__pos_transactions
+    description: One row per line item on a point-of-sale ticket.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [transaction_id, line_number]
+    columns:
+      - name: sku
+        data_tests:
+          - relationships: {arguments: {to: ref('stg_cascade__products'), field: sku}}
+      - name: store_id
+        data_tests:
+          - relationships: {arguments: {to: ref('stg_cascade__stores'), field: store_id}}
+  - name: stg_cascade__inventory_daily
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [snapshot_date, store_id, sku]
+  - name: stg_cascade__inventory_movements
+    columns:
+      - name: movement_id
+        data_tests: [unique, not_null]
+      - name: movement_type
+        data_tests:
+          - accepted_values: {arguments: {values: [SALE, RECEIPT, SHRINK]}}
+  - name: stg_cascade__vendors
+    columns:
+      - name: vendor_id
+        data_tests: [unique, not_null]
+  - name: stg_cascade__procurement_transactions
+    columns:
+      - name: transaction_type
+        data_tests:
+          - accepted_values: {arguments: {values: [PO_ISSUED, RECEIVED, INVOICED, PAID]}}
+  - name: stg_cascade__fx_rates
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [rate_date, from_currency, to_currency]
+  - name: stg_cascade__web_orders
+    columns:
+      - name: order_number
+        data_tests: [unique, not_null]
+  - name: stg_cascade__web_order_lines
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_number, line_number]
+  - name: stg_cascade__gl_accounts
+    columns:
+      - name: account_id
+        data_tests: [unique, not_null]
+  - name: stg_cascade__gl_journal_lines
+    columns:
+      - name: journal_entry_id
+        data_tests: [unique, not_null]
+  - name: stg_cascade__gl_budget

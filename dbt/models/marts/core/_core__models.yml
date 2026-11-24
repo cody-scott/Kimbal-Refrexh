@@ -1,0 +1,90 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: Conformed date dimension (day grain) with calendar and fiscal (Feb-start) attributes.
+    columns:
+      - name: date_key
+        description: Smart key YYYYMMDD. -1 = Unknown, -2 = Not Yet Happened.
+        data_tests: [unique, not_null]
+      - name: full_date
+        data_tests:
+          - unique
+
+  - name: metricflow_time_spine
+    description: Day-grain time spine for the dbt Semantic Layer.
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+
+  - name: dim_product
+    description: Conformed product dimension. Type 2 on brand, category, department, package size.
+    columns:
+      - name: product_key
+        description: Surrogate key for one version of a product.
+        data_tests: [unique, not_null]
+      - name: product_durable_key
+        description: Stable key across all versions of the product (Type 7).
+        data_tests: [not_null]
+      - name: sku
+        description: Natural key from the merchandising system.
+    data_tests:
+      - scd2_valid_ranges:
+          arguments:
+            natural_key: sku
+
+  - name: dim_store
+    description: Conformed store dimension (Type 1), including the Web Store.
+    config:
+      contract: {enforced: true}
+    columns:
+      - {name: store_key, data_type: varchar, constraints: [{type: not_null}, {type: primary_key}], data_tests: [unique]}
+      - {name: store_number, data_type: number}
+      - {name: store_name, data_type: varchar}
+      - {name: store_channel, data_type: varchar}
+      - {name: store_city, data_type: varchar}
+      - {name: store_state, data_type: varchar}
+      - {name: store_district, data_type: varchar}
+      - {name: store_region, data_type: varchar}
+      - {name: selling_square_footage, data_type: number}
+      - {name: store_size_band, data_type: varchar}
+      - {name: first_open_date, data_type: date}
+      - {name: store_manager, data_type: varchar}
+
+  - name: dim_promotion
+    columns:
+      - name: promotion_key
+        data_tests: [unique, not_null]
+
+  - name: dim_customer
+    description: Conformed customer dimension. Type 2 on city, state, loyalty tier.
+    columns:
+      - name: customer_key
+        data_tests: [unique, not_null]
+    data_tests:
+      - scd2_valid_ranges:
+          arguments:
+            natural_key: customer_id
+
+  - name: dim_customer_demographics
+    description: Type 4 mini-dimension of banded customer demographics.
+    columns:
+      - name: customer_demographics_key
+        data_tests: [unique, not_null]
+
+  - name: dim_employee
+    description: Employee dimension, Type 2 from HR events, with inferred members for late-arriving employees.
+    columns:
+      - name: employee_key
+        data_tests: [unique, not_null]
+    data_tests:
+      - scd2_valid_ranges:
+          arguments:
+            natural_key: employee_id
+
+  - name: dim_vendor
+    columns:
+      - name: vendor_key
+        data_tests: [unique, not_null]

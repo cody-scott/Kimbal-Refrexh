@@ -1,0 +1,7 @@
+store_id,store_name,city,state,district,region,square_footage,opened_date,manager_name
+101,Seattle Flagship,Seattle,WA,Puget Sound,Northwest,42000,2015-03-01,Avery Chen
+102,Bellevue,Bellevue,WA,Puget Sound,Northwest,28000,2018-06-15,Jordan Patel
+103,Portland Pearl,Portland,OR,Willamette,Northwest,31000,2016-09-01,Riley Okafor
+201,Denver LoDo,Denver,CO,Front Range,Mountain,35000,2017-04-01,Morgan Silva
+202,Boulder,Boulder,CO,Front Range,Mountain,22000,2019-10-01,Casey Nguyen
+999,Web Store,Online,NA,Digital,Digital,0,2014-01-01,Taylor Brooks

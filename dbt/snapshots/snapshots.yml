@@ -1,0 +1,29 @@
+version: 2
+
+# dbt snapshots implement Kimball Type 2 by *observing* the source each time
+# `dbt snapshot` runs. They capture only changes that happen between runs,
+# so schedule them at least as often as the source changes.
+snapshots:
+  - name: snap_products
+    relation: ref('stg_cascade__products')
+    description: >
+      Check strategy: compares the listed columns on every run and opens a new
+      version when any of them differs. Use when the source has no reliable
+      updated_at column.
+    config:
+      unique_key: sku
+      strategy: check
+      check_cols: [brand, category, department, package_size]
+      dbt_valid_to_current: "to_timestamp_ntz('9999-12-31 23:59:59')"
+      hard_deletes: invalidate
+
+  - name: snap_customers
+    relation: ref('stg_cascade__customers')
+    description: >
+      Timestamp strategy: trusts updated_at. Cheaper than check, but only
+      as reliable as the source's updated_at discipline.
+    config:
+      unique_key: customer_id
+      strategy: timestamp
+      updated_at: updated_at
+      dbt_valid_to_current: "to_timestamp_ntz('9999-12-31 23:59:59')"

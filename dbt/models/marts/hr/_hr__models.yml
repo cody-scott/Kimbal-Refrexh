@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: bridge_employee_reporting
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [manager_employee_id, subordinate_employee_id]
+  - name: fct_headcount_monthly
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [month_end_date_key, employee_key]

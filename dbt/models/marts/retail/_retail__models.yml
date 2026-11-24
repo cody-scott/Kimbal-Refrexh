@@ -1,0 +1,88 @@
+version: 2
+
+models:
+  - name: fct_retail_sales
+    description: >
+      Retail sales transaction fact. Grain: one row per product line on a
+      POS transaction. Incremental (merge) with a 3-day lookback.
+    data_tests:
+      # The grain declaration, enforced.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [transaction_id, line_number]
+      # Every source row lands exactly once.
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_cascade__pos_transactions')
+    columns:
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_date'), field: date_key}}
+      - name: product_key
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_product'), field: product_key}}
+      - name: store_key
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_store'), field: store_key}}
+      - name: promotion_key
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_promotion'), field: promotion_key}}
+      - name: customer_key
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_customer'), field: customer_key}}
+      - name: customer_demographics_key
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_customer_demographics'), field: customer_demographics_key}}
+      - name: cashier_key
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_employee'), field: employee_key}}
+      - name: product_key
+      - name: sales_quantity
+        description: Fully additive.
+      - name: extended_net_sales_amount
+        description: Gross sales less discounts. Fully additive.
+
+  - name: fct_promotion_coverage
+    description: Factless coverage fact. Grain is product x store x day x promotion while on promotion.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [date_key, product_key, store_key, promotion_key]
+
+unit_tests:
+  - name: test_fct_retail_sales_extended_amounts
+    description: Extended amounts are quantity x unit price, net of discount; anonymous shoppers map to '-2'.
+    model: fct_retail_sales
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref('stg_cascade__pos_transactions')
+        rows:
+          - {transaction_id: 1, line_number: 1, store_id: 101, register_id: R1, cashier_employee_id: E009, customer_id: null, sku: SKU-1001, promo_code: null, quantity: 2, unit_price: 100.00, discount_amount: 15.00, unit_cost: 40.00, transaction_ts: "2025-03-01 10:00:00", transaction_date: "2025-03-01"}
+      - input: ref('dim_product')
+        rows:
+          - {product_key: p1, product_durable_key: pd1, sku: SKU-1001, valid_from: "1900-01-01 00:00:00", valid_to: "9999-12-31 23:59:59"}
+      - input: ref('dim_customer')
+        rows: []
+      - input: ref('dim_employee')
+        rows: []
+      - input: ref('dim_store')
+        rows:
+          - {store_key: s1, store_number: 101}
+      - input: ref('dim_promotion')
+        rows: []
+      - input: ref('dim_customer_demographics')
+        rows: []
+      - input: ref('stg_cascade__customers')
+        rows: []
+    expect:
+      rows:
+        - {product_key: p1, store_key: s1, customer_key: "-2", cashier_key: "-1", sales_quantity: 2, extended_gross_sales_amount: 200.00, extended_net_sales_amount: 185.00, extended_cost_amount: 80.00, extended_gross_profit_amount: 105.00}

@@ -1,0 +1,20 @@
+employee_id,event_date,event_type,job_title,store_id,is_termination
+E001,2014-01-01,HIRE,CEO,,0
+E002,2015-02-01,HIRE,VP Retail,,0
+E003,2016-03-01,HIRE,VP Digital,,0
+E004,2015-03-01,HIRE,Regional Director NW,,0
+E005,2017-04-01,HIRE,Regional Director Mountain,,0
+E006,2016-09-01,HIRE,Store Manager,103,0
+E007,2018-06-15,HIRE,Store Manager,102,0
+E008,2019-10-01,HIRE,Store Manager,202,0
+E009,2021-05-01,HIRE,Sales Associate,103,0
+E010,2022-07-11,HIRE,Sales Associate,103,0
+E011,2023-01-09,HIRE,Sales Associate,102,0
+E012,2023-03-20,HIRE,Sales Associate,202,0
+E013,2020-02-03,HIRE,Ecommerce Manager,999,0
+E014,2024-08-19,HIRE,Analyst,999,0
+E011,2025-03-01,PROMOTION,Senior Sales Associate,102,0
+E010,2025-04-15,TRANSFER,Sales Associate,101,0
+E012,2025-05-31,TERMINATION,Sales Associate,202,1
+E015,2025-02-03,HIRE,Sales Associate,201,0
+E016,2025-05-12,HIRE,Sales Associate,101,0
