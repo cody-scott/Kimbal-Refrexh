@@ -1,0 +1,29 @@
+---
+title: "Module 0: Foundations"
+sidebar_label: Overview
+description: Why dimensional modeling exists, the anatomy of a star schema, and Kimball's four-step design process.
+sidebar_position: 0
+---
+
+# Module 0: Foundations
+
+Before memorizing techniques, internalize the **two goals** that every Kimball decision serves:
+
+1. **Understandability.** A business person should look at the model and recognize their business.
+2. **Query performance.** Queries should be simple, predictable joins that a database (or BI tool) can optimize.
+
+Almost every rule you'll learn (denormalize dimensions, declare the grain, use surrogate keys, conform your
+dimensions) is a consequence of those two goals.
+
+## Lessons
+
+| Lesson | You'll be able to... |
+|---|---|
+| [Why dimensional modeling](/foundations/why-dimensional-modeling) | Explain what problem a star schema solves that 3NF doesn't |
+| [Anatomy of a star schema](/foundations/star-schema-anatomy) | Identify facts, dimensions, keys and grain in any model |
+| [The four-step design process](/foundations/four-step-process) | Design a star from a business process in four decisions |
+| [Declaring the grain](/foundations/declaring-the-grain) | Write a precise grain statement and spot mixed-grain tables |
+| [Requirements and modeling workshops](/foundations/requirements-and-workshops) | Run a design session the way Kimball recommends |
+| [Kimball, Inmon, Data Vault and One Big Table](/foundations/modeling-approaches) | Place Kimball among the alternatives and in a dbt project |
+
+<KimballRef chapters={[1, 2, 3, 18]} techniques={['Four-step dimensional design process', 'Grain', 'Star schemas and OLAP cubes']} />

@@ -1,0 +1,87 @@
+---
+title: Glossary
+description: Definitions of dimensional modeling terms used throughout the guide.
+sidebar_position: 4
+hide_progress: true
+---
+
+# Glossary
+
+**Accumulating snapshot**: a fact table with one row per instance of a process with defined milestones, updated as
+each milestone is reached. → [lesson](/facts/accumulating-snapshot-fact-tables)
+
+**Additive fact**: a fact that can be summed across all dimensions. → [lesson](/facts/additivity)
+
+**Aggregate fact table**: a pre-summarized copy of an atomic fact at a coarser grain, for performance.
+
+**Allocation**: distributing a fact measured at a coarser grain (header) down to a finer grain (lines).
+
+**Atomic grain**: the lowest level of detail captured by a business process.
+
+**Audit dimension**: a dimension describing the load process that produced each fact row.
+
+**Bridge table**: a table resolving a many-to-many between a fact (or dimension) and a dimension, or representing a
+ragged hierarchy. → [multivalued](/advanced/multivalued-dimensions-and-bridges), [hierarchies](/advanced/ragged-and-recursive-hierarchies)
+
+**Bus architecture**: Kimball's approach to an integrated warehouse built process by process on conformed dimensions.
+
+**Bus matrix**: grid of business processes × conformed dimensions. → [lesson](/bus/bus-matrix)
+
+**Business process**: an operational activity that generates measurable events (sales, receipts, payments).
+
+**Centipede fact table**: a fact table with far too many dimension keys, usually hierarchy levels or flags that
+belong elsewhere.
+
+**Conformed dimension**: a dimension with identical keys, attributes and meaning across all fact tables that use it.
+
+**Conformed fact**: a measure with the same definition wherever it appears.
+
+**Consolidated fact table**: a fact table combining measures from several processes at a common grain.
+
+**Coverage table**: a factless fact table recording what *could* have happened (eligibility), to find non-events.
+
+**Degenerate dimension**: a dimension key stored on the fact with no dimension table, typically a transaction number.
+
+**Dimension**: a table of descriptive attributes providing context for facts.
+
+**Drill across**: combining results from multiple fact tables via conformed dimension attributes.
+
+**Drill down**: adding a more detailed dimension attribute to a query.
+
+**Durable key**: a warehouse key identifying an entity across all its versions.
+
+**Fact**: a numeric measurement of a business process event.
+
+**Factless fact table**: a fact table with keys but no measures, recording events or coverage.
+
+**Grain**: the precise definition of what one fact row represents.
+
+**Inferred member**: a placeholder dimension row created when a fact arrives before its dimension record.
+
+**Junk dimension**: a dimension combining unrelated low-cardinality flags and indicators.
+
+**Lag fact**: a duration between milestones, stored as a fact.
+
+**Mini-dimension**: a small dimension of banded, rapidly changing attributes split from a large dimension (SCD Type 4).
+
+**Natural key**: the identifier from the source system.
+
+**Outrigger**: a secondary dimension joined to a dimension rather than to the fact.
+
+**Periodic snapshot**: a fact table with one row per entity per regular period, recording state.
+
+**Role-playing dimension**: one physical dimension referenced several times by a fact in different roles.
+
+**Semi-additive fact**: a fact summable across some dimensions but not others (typically not across time).
+
+**Shrunken dimension**: a conformed subset (rollup or slice) of a base dimension.
+
+**Slowly changing dimension (SCD)**: the set of techniques (Types 0–7) for handling changes to dimension attributes.
+
+**Snowflaking**: normalizing a dimension's hierarchy into separate tables (discouraged for presentation).
+
+**Star schema**: a fact table surrounded by denormalized dimension tables.
+
+**Surrogate key**: a meaningless warehouse-assigned key identifying one row (version) of a dimension.
+
+**Transaction fact table**: a fact table with one row per measurement event.

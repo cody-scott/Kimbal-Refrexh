@@ -1,0 +1,99 @@
+---
+title: More advanced techniques
+description: Step dimensions, behavior tags and study groups, timespan tracking, measure type dimensions, text comments, YTD facts, real-time facts and more.
+sidebar_position: 10
+---
+
+# More advanced techniques
+
+<KimballRef chapters={[2, 8, 14, 15]} techniques={['Step Dimensions', 'Behavior Tag Time Series', 'Behavior Study Groups', 'Aggregated Facts as Dimension Attributes', 'Timespan Tracking in Fact Tables', 'Measure Type Dimensions', 'Text Comments Dimension', 'Hot Swappable Dimensions', 'Abstract Generic Dimensions', 'Year-to-Date Facts', 'Real-Time Fact Tables']} />
+
+These techniques come up less often, but recognizing them saves you from reinventing them badly.
+
+## Aggregated facts as dimension attributes
+
+Users love filtering customers by *behavior*: "customers who spent over $1,000 last year", "lapsed customers".
+Compute these from facts and store them as **(banded) dimension attributes**, refreshed on a schedule:
+
+```sql
+-- in a customer dimension model
+case
+  when ltm_net_sales >= 1000 then 'High Value ($1k+)'
+  when ltm_net_sales >= 250  then 'Mid Value ($250-$999)'
+  when ltm_net_sales > 0     then 'Low Value'
+  else 'No Purchases (12 mo)'
+end as customer_value_segment
+```
+
+## Behavior tag time series
+
+Kimball (Ch. 8) describes storing a customer's **segment label per period** (e.g. monthly RFM tags
+"Champion" → "At Risk" → "Lapsed") as a series of attributes or a narrow fact, so analysts can find
+transition patterns such as "customers who went from Champion to At Risk in Q2".
+
+## Behavior study groups
+
+Save the **set of customer keys** satisfying a complex condition ("bought a tent in spring, but no sleeping bag")
+as a small table. Then join it to any fact to study that group's behavior anywhere. In Snowflake, a simple table of
+durable keys, or a dbt model per study group.
+
+## Step dimensions
+
+For sequential processes (web sessions, call-center flows), a **step dimension** describes a step's position:
+step number, total steps in the sequence, "is first step", "is last step". It answers questions like "what page did
+sessions end on?". See the [E-commerce case study](/case-studies/ecommerce-clickstream).
+
+## Timespan tracking in fact tables
+
+Some facts describe a **state over an interval** (an account's status, a policy's coverage). Add
+`effective_ts` / `expiration_ts` to the fact row, like a Type 2 dimension, and query "as of" any instant with a
+range predicate. Kimball uses this for customer status and insurance coverage.
+
+## Measure type dimensions
+
+When a process has **hundreds of sparse measures** (lab results, sensor readings, survey answers), a fact
+row per *measurement* with a `measure_type_key` beats a fact table with 500 mostly-null columns. The trade-off:
+arithmetic across measures (A − B) needs a pivot. Use it only for genuinely sparse, heterogeneous measures.
+
+```sql
+-- one row per patient encounter per lab test
+select mt.measure_name, avg(f.measured_value)
+from fct_lab_results f
+join dim_measure_type mt on mt.measure_type_key = f.measure_type_key
+where mt.measure_group = 'Lipid Panel'
+group by 1;
+```
+
+## Text comments dimension
+
+Free-text notes (support comments, survey verbatims) don't belong in the fact table. Put them in a
+**comments dimension** referenced by the fact, often deduplicated. Snowflake Cortex functions such as
+`SNOWFLAKE.CORTEX.SENTIMENT` can then enrich that dimension with derived attributes.
+
+## Multiple time zones and calendars
+
+Carry both local and standard (UTC) date and time roles (see [The date dimension](/dimensions/date-dimension#multiple-time-zones)).
+For multinational businesses, country-specific holiday calendars often join through a (date, country) outrigger.
+
+## Hot swappable and abstract generic dimensions
+
+- **Hot swappable:** the same fact can join to *alternative* versions of a dimension, e.g. a
+  client-specific product dimension for each customer of a data-service company. In dbt, use alternative models or
+  views with the same key.
+- **Abstract generic:** Kimball cautions against "one generic location dimension" merging stores, customers
+  and vendors' addresses. Each role usually deserves its own conformed dimension with clear attributes.
+
+## Year-to-date facts
+
+Avoid storing YTD values in a fact: they're non-additive and go stale on restatement. Compute YTD in the
+semantic layer (cumulative metrics with `grain_to_date: year`) or with window functions at query time.
+
+## Real-time fact tables
+
+For low-latency needs, Kimball describes a "hot partition" holding today's data, merged with history at query
+time. In Snowflake: **Dynamic Tables** with a short `target_lag`, or Snowpipe Streaming into a raw table with
+an incremental dbt model run frequently. The atomic history stays in the normal fact table.
+
+<Quiz questions={[
+  {question: 'Why should "lifetime spend band" be a dimension attribute rather than computed in every report?', options: ['It is a fact', 'Users filter and group customers by it, so it should be a consistent, labeled attribute', 'Snowflake cannot compute it', 'It never changes'], answer: 1, explanation: 'Aggregated facts used for filtering and grouping become banded dimension attributes, refreshed on a schedule.'},
+]} />

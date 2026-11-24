@@ -1,0 +1,99 @@
+---
+title: Set up the lab
+description: Build the Cascade Outfitters dbt project in your own Snowflake account.
+hide_progress: true
+---
+
+# Set up the lab
+
+The companion project lives in [`dbt/`](https://github.com/cody-scott/Kimbal-Refrexh/tree/main/dbt). It's a
+standard dbt project targeting **Snowflake**: seeds stand in for raw tables, then staging, intermediate and
+mart models build a full Kimball warehouse.
+
+## 1. Snowflake
+
+Any Snowflake account works; a free trial is plenty (the whole project builds in under a minute on an X-Small
+warehouse). Create a database, a warehouse and a role for dbt:
+
+```sql
+use role accountadmin;
+
+create warehouse if not exists transforming_wh
+  warehouse_size = xsmall auto_suspend = 60 auto_resume = true initially_suspended = true;
+
+create database if not exists kimball_lab;
+
+create role if not exists transformer;
+grant usage on warehouse transforming_wh to role transformer;
+grant all on database kimball_lab to role transformer;
+grant role transformer to user <your_user>;
+```
+
+## 2. dbt
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install "dbt-core~=1.10" "dbt-snowflake~=1.10"
+
+cd dbt
+cp profiles.example.yml ~/.dbt/profiles.yml     # then edit, or set the env vars below
+export SNOWFLAKE_ACCOUNT=abc12345.us-east-1
+export SNOWFLAKE_USER=you
+export SNOWFLAKE_PASSWORD='...'
+export SNOWFLAKE_ROLE=TRANSFORMER
+export SNOWFLAKE_WAREHOUSE=TRANSFORMING_WH
+export SNOWFLAKE_DATABASE=KIMBALL_LAB
+
+dbt deps        # installs dbt_utils
+dbt debug       # checks the connection
+```
+
+## 3. Build
+
+```bash
+dbt seed        # loads the raw Cascade Outfitters data (about 60k rows)
+dbt build       # runs every model, snapshot, data test and unit test in DAG order
+dbt docs generate && dbt docs serve   # browse the lineage graph
+```
+
+With the dev target, objects land in schemas prefixed with your target schema:
+
+| Schema | Contents |
+|---|---|
+| `DEV_RAW` | Seeds (the "source system") |
+| `DEV_STAGING` | `stg_` views: renamed, typed, cleaned; no business logic |
+| `DEV_INTERMEDIATE` | `int_` views: reusable steps such as SCD history and allocations |
+| `DEV_MARTS` | `dim_`, `fct_`, `bridge_`, `agg_` tables: the dimensional model |
+| `DEV_SCD_LAB` | Side-by-side SCD Type 0 to 7 examples |
+| `DEV_SNAPSHOTS` | dbt snapshots |
+
+## 4. Explore
+
+The `analyses/` folder holds the "business questions" queries used in the lessons. Compile one and run it in a
+Snowflake worksheet:
+
+```bash
+dbt compile -s as_was_vs_as_is
+cat target/compiled/kimball_lab/analyses/as_was_vs_as_is.sql
+```
+
+## Regenerating the data
+
+The seed CSVs are produced by a deterministic script, so you can change volumes or add scenarios:
+
+```bash
+python dbt/scripts/generate_seeds.py
+```
+
+## How CI checks the project without Snowflake
+
+GitHub Actions has no Snowflake account, so CI:
+
+1. runs `dbt parse` against the Snowflake adapter (catches YAML, Jinja and ref errors);
+2. compiles the project with a DuckDB profile (`dbt/ci/profiles.yml`);
+3. runs [`scripts/smoke_test_duckdb.py`](https://github.com/cody-scott/Kimbal-Refrexh/blob/main/dbt/scripts/smoke_test_duckdb.py),
+   which transpiles each compiled Snowflake model to DuckDB with **sqlglot**, builds the whole DAG and runs every data
+   test and analysis.
+
+This proves the *logic* (grain, keys, joins, SCD history), but it's no substitute for a real `dbt build` on
+Snowflake. Run that yourself.

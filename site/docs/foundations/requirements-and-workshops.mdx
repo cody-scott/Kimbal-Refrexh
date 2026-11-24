@@ -1,0 +1,98 @@
+---
+title: Requirements and modeling workshops
+description: Gathering business requirements and data realities, running collaborative design sessions, and documenting the design.
+sidebar_position: 5
+---
+
+# Requirements and modeling workshops
+
+<KimballRef chapters={[17, 18]} techniques={['Gather business requirements and data realities', 'Collaborative dimensional modeling workshops']}>
+Chapter 17 places modeling inside the overall Kimball Lifecycle; Chapter 18 is a practical guide to
+running the design process: who attends, what to prepare, and what to produce.
+</KimballRef>
+
+Dimensional models aren't designed by data engineers alone at a whiteboard. Kimball's method balances two
+inputs:
+
+| Business requirements | Data realities |
+|---|---|
+| What decisions do people make? | What do the source systems actually capture? |
+| What do they measure, and how do they describe it? | At what grain? With what quality? |
+| What questions do they ask that they can't answer today? | Are the keys stable? Is history kept? |
+
+A model that ignores requirements is unused; a model that ignores data realities is unbuildable.
+
+## Gathering requirements
+
+Interview business people about **their work, not the data warehouse**. Useful prompts:
+
+- "Walk me through what you review each week. What do you do when a number looks wrong?"
+- "How do you know if this week was good or bad? Compared to what?"
+- "Which groupings do you use: regions? categories? customer segments? Where do they come from?"
+- "What do you have to do by hand in spreadsheets today?"
+
+Listen for **verbs** (business processes), **nouns** (dimensions), **numbers** (facts) and **"by"** phrases
+("sales *by* region *by* month"): those are dimension attributes.
+
+## Profiling the data realities
+
+Before the workshop, profile the candidate sources. In dbt that means writing staging models and quick
+exploratory queries:
+
+```sql
+-- Is the natural key really unique? Does it ever change?
+select sku, count(*) from raw.products group by sku having count(*) > 1;
+
+-- What's the real grain of the POS feed?
+select transaction_id, line_number, count(*)
+from raw.pos_transactions group by all having count(*) > 1;
+
+-- How often do attributes change? (drives SCD choices)
+select attribute_name, count(*) from raw.product_changes group by 1;
+```
+
+Turn the discoveries into **staging-layer tests** (`unique`, `not_null`, `relationships`, `accepted_values`) so
+the assumptions keep being checked; see `models/staging/cascade/_cascade__models.yml` in the lab.
+
+## The workshop
+
+Kimball recommends **collaborative modeling workshops**: business experts and modelers in the same room,
+working process by process.
+
+1. **High-level model (bubble chart).** For one business process, sketch the fact table in the middle and the
+   candidate dimensions around it. Agree on the grain *first*.
+2. **Detailed design.** For each table, list every column: name, description, sample values, source,
+   SCD type for each attribute, and transformation rules. Kimball uses a spreadsheet-based "detailed dimensional
+   design worksheet".
+3. **Issues log.** Record every open question (definitions, data gaps, conflicts) with an owner.
+4. **Review and validate** with a broader group, then iterate.
+
+## Documentation in dbt
+
+dbt gives you a natural home for the detailed design: model and column descriptions in YAML, published with
+`dbt docs`. A useful convention is to record the **four-step decisions** in each fact model's header, and the
+**SCD type** for each dimension column in its description:
+
+```yaml
+- name: dim_product
+  description: Conformed product dimension. Type 2 on brand, category, department, package size.
+  columns:
+    - name: category
+      description: "Merchandise category. SCD Type 2: history preserved."
+    - name: product_name
+      description: "Product name. SCD Type 1: overwritten (corrections only)."
+```
+
+## Pitfalls
+
+- **Asking "what data do you want?"** You'll get a list of every field in the source. Ask about
+  decisions and measurements instead.
+- **Designing for one report.** Ask which other teams use the same process; that's where conformed dimensions
+  come from (see [The bus matrix](/bus/bus-matrix)).
+- **Skipping data profiling.** Grain surprises (duplicate lines, reused ticket numbers) are much cheaper to find
+  before the model is built.
+
+<Quiz questions={[
+  {question: 'In an interview a user says "I look at margin by category by region every Monday." Which part points to dimension attributes?', options: ['Margin', 'Every Monday', 'By category, by region', 'I look at'], answer: 2, explanation: '"By" phrases are grouping and filtering attributes. Margin is a (derived) fact; Monday hints at the date dimension and report cadence.'},
+  {question: 'What should be agreed first in a modeling workshop for a business process?', options: ['Column names', 'Surrogate key strategy', 'The grain', 'Which BI tool to use'], answer: 2, explanation: 'As in the four-step process, the grain anchors every later choice of dimensions and facts.'},
+]} />

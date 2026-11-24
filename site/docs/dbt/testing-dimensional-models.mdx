@@ -1,0 +1,85 @@
+---
+title: Testing dimensional models
+description: A test strategy for stars, covering grain, referential integrity, special members, SCD integrity, reconciliation and unit tests, with the lab's 94 tests as examples.
+sidebar_position: 4
+---
+
+# Testing dimensional models
+
+<KimballRef chapters={[19]} techniques={['Error Event Schemas']}>
+Kimball's "data cleansing system" and "error event schema" subsystems (Ch. 19) are about systematically
+checking data quality. dbt tests make those checks part of every build.
+</KimballRef>
+
+Dimensional models make **specific promises**: this table has this grain; every fact row joins to every
+dimension; each Type 2 entity has exactly one current row; the aggregate equals the atomic total. Each promise
+is a test.
+
+## The test pyramid for a star
+
+| Promise | Test | Lab example |
+|---|---|---|
+| **Natural keys are what we think** (staging) | `unique`, `not_null` on source keys; `accepted_values` on codes | `stg_cascade__inventory_movements.movement_type` |
+| **Dimension PK is unique** | `unique` + `not_null` on `<dim>_key` | every `dim_` |
+| **Fact grain holds** | `dbt_utils.unique_combination_of_columns` on the grain columns | `fct_retail_sales` (transaction_id, line_number) |
+| **No fan-out / no loss** | `dbt_utils.equal_rowcount` vs the source | `fct_retail_sales` vs `stg_cascade__pos_transactions` |
+| **Every FK resolves** | `not_null` + `relationships` on each fact FK | all 7 FKs on `fct_retail_sales` |
+| **Type 2 integrity** | custom `scd2_valid_ranges` | `dim_product`, `dim_customer`, `dim_employee` |
+| **Business rules tie out** | singular tests | aggregates tie; allocations tie; bridge weights sum to 1 |
+| **Transformation logic is right** | unit tests with fixed inputs | extended amounts; shipping allocation |
+| **Data quality trends** | `warn` severity thresholds on unknown-member counts | (see [special members](/dimensions/special-members)) |
+
+## Grain and fan-out
+
+<DbtFile path="models/marts/retail/_retail__models.yml" lines={[1, 50]} title="_retail__models.yml (grain and RI tests)" />
+
+## SCD integrity
+
+<DbtFile path="tests/generic/scd2_valid_ranges.sql" collapsed />
+
+## Reconciliation (singular tests)
+
+<Tabs>
+<TabItem value="agg" label="Aggregate ties to atomic">
+<DbtFile path="tests/assert_aggregate_ties_to_atomic_fact.sql" />
+</TabItem>
+<TabItem value="alloc" label="Allocation ties to header">
+<DbtFile path="tests/assert_order_lines_tie_to_headers.sql" />
+</TabItem>
+<TabItem value="bridge" label="Bridge weights sum to 1">
+<DbtFile path="tests/assert_interest_weights_sum_to_one.sql" />
+</TabItem>
+</Tabs>
+
+## Unit tests (dbt 1.8+)
+
+Data tests check the *data*; unit tests check the *logic* against small, fixed inputs, before any real data
+is touched. They're ideal for the tricky parts of dimensional SQL: point-in-time joins, allocations, banding,
+special-member fallbacks.
+
+<DbtFile path="models/marts/retail/_retail__models.yml" lines={[58, 87]} title="Unit test: extended amounts and anonymous shopper" />
+
+Run only unit tests with `dbt test --select "test_type:unit"`. In CI, run them before the expensive builds.
+
+## Severity and thresholds
+
+Not every failure should stop the pipeline:
+
+```yaml
+data_tests:
+  - relationships:
+      arguments: {to: ref('dim_product'), field: product_key}
+      config:
+        severity: error            # broken RI is always an error
+  - dbt_utils.expression_is_true:
+      arguments: {expression: "product_key <> '-1'"}
+      config:
+        severity: warn             # some unknowns are expected...
+        warn_if: ">0"
+        error_if: ">100"           # ...but not many
+```
+
+<Quiz questions={[
+  {question: 'Which test catches a Type 2 dimension joined without its effective-date predicate?', options: ['unique on product_key', 'relationships on product_key', 'equal_rowcount between the fact and its source (or a grain uniqueness test)', 'accepted_values'], answer: 2, explanation: 'The bad join multiplies fact rows. Row-count and grain tests catch it; key tests on the dimension do not.'},
+  {question: 'What is the difference between a data test and a unit test in dbt?', options: ['None', 'Data tests check built data; unit tests check model logic against fixed mock inputs', 'Unit tests are slower', 'Data tests only run in production'], answer: 1, explanation: 'Unit tests validate SQL logic deterministically; data tests validate the actual data each build.'},
+]} />

@@ -1,0 +1,25 @@
+---
+title: "Module 2: Dimension tables"
+sidebar_label: Overview
+description: Surrogate keys, the date dimension, attributes and hierarchies, degenerate, junk, role-playing and conformed dimensions.
+sidebar_position: 0
+---
+
+# Module 2: Dimension tables
+
+Kimball says dimensions are the "soul" of the warehouse: they supply every label, filter and grouping. A
+great dimension makes a mediocre fact table useful; a poor one makes a great fact table unusable.
+
+| Lesson | Kimball technique(s) | Lab model |
+|---|---|---|
+| [Surrogate, natural and durable keys](/dimensions/surrogate-keys) | Dimension Surrogate Keys; Natural, Durable, and Supernatural Keys | every `dim_` |
+| [The date dimension](/dimensions/date-dimension) | Calendar Date Dimensions; Multiple Time Zones | `dim_date` |
+| [Attributes, hierarchies and flags](/dimensions/attributes-and-hierarchies) | Denormalized Flattened Dimensions; Multiple Hierarchies; Flags and Indicators as Textual Attributes; Null Attributes; Drilling Down | `dim_product`, `dim_store` |
+| [Special members: unknown, not applicable, late](/dimensions/special-members) | Null Attributes in Dimensions; Late Arriving Dimensions | `unknown_member_row` |
+| [Degenerate dimensions](/dimensions/degenerate-dimensions) | Degenerate Dimensions | `fct_retail_sales.transaction_id` |
+| [Junk dimensions](/dimensions/junk-dimensions) | Junk Dimensions | `dim_order_profile` |
+| [Role-playing dimensions](/dimensions/role-playing-dimensions) | Role-Playing Dimensions | `dim_order_date`, `dim_ship_date` |
+| [Snowflaking and outriggers](/dimensions/outriggers-and-snowflaking) | Snowflaked Dimensions; Outrigger Dimensions; Dimension-to-Dimension Table Joins | |
+| [Conformed and shrunken dimensions](/dimensions/conformed-dimensions) | Conformed Dimensions; Shrunken Dimensions | `dim_product`, `dim_month` |
+
+<KimballRef chapters={[2, 3, 6]} techniques={['Dimension Table Structure', 'Conformed Dimensions']} />

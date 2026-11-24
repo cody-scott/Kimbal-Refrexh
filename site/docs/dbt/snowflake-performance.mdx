@@ -1,0 +1,90 @@
+---
+title: Snowflake performance and cost
+description: Making star schemas fast and cheap on Snowflake, with clustering, pruning, warehouse sizing, transient tables and MERGE costs.
+sidebar_position: 7
+---
+
+# Snowflake performance and cost
+
+<KimballRef chapters={[1]}>
+Query performance is one of Kimball's two goals for a dimensional model. On Snowflake, the levers are different
+from row-store databases, but star schemas remain the shape the engine handles best.
+</KimballRef>
+
+## Why stars suit Snowflake
+
+- Dimensions are small, so Snowflake **broadcasts** them to every node, and joins are cheap.
+- Filters on dimension attributes can be turned into **join filters** that prune fact micro-partitions.
+- Columnar storage means wide dimensions cost nothing for columns you don't select.
+
+## Micro-partitions and clustering
+
+Snowflake stores tables in micro-partitions with min/max metadata per column. Queries that filter on a column
+whose values are **clustered** skip most partitions.
+
+- Facts loaded in date order are **naturally clustered by date**. Keep it that way: incremental loads in date
+  order help.
+- For large facts (hundreds of millions of rows or more), declare `cluster_by` on the most common filter column:
+  usually `date_key`, sometimes `(date_key, store_key)`. The lab does this on `fct_retail_sales` and
+  `fct_inventory_daily_snapshot`.
+- **Don't cluster small tables.** Automatic clustering costs credits.
+
+```sql
+-- How well clustered is the fact by date?
+select system$clustering_information('marts.fct_retail_sales', '(date_key)');
+```
+
+## Integer date keys help pruning
+
+`date_key = 20250301` is an integer that sorts and prunes cleanly. Filtering facts on a **date-key range** prunes
+directly, without a join:
+
+```sql
+where f.date_key between 20250301 and 20250331
+```
+
+## Warehouses
+
+- Size the **transformation** warehouse for `dbt build` (often S or M), and keep BI on a separate warehouse so a big
+  build doesn't slow dashboards.
+- Set `auto_suspend` to 60 seconds for dev and bursty workloads.
+- Use dbt's `snowflake_warehouse` config to send one heavy model (a big snapshot fact) to a larger warehouse:
+
+```sql
+{{ config(snowflake_warehouse='TRANSFORMING_WH_L') }}
+```
+
+## Table types
+
+| Config | Effect | Use for |
+|---|---|---|
+| `transient: true` (dbt default on Snowflake) | No Fail-safe, cheaper storage | Rebuildable marts |
+| `transient: false` | Full Fail-safe (7 days) | **Snapshots, `dim_audit`**, anything you can't rebuild |
+| Time Travel retention (`data_retention_time_in_days`) | Undrop and query history | Raise for critical stateful tables |
+
+```yaml
+# dbt_project.yml
+snapshots:
+  kimball_lab:
+    +transient: false     # snapshot history cannot be rebuilt from source
+```
+
+## MERGE costs
+
+`merge` must find matching target rows. On big tables:
+
+- restrict with `incremental_predicates` (see [incremental facts](./incremental-facts));
+- ensure the merge key's date component lines up with the clustering;
+- consider `delete+insert` or `microbatch` for period-replace workloads.
+
+## Query profile habits
+
+- Use **Query Profile** to check "partitions scanned / total". Low ratios mean pruning works.
+- Watch for **exploding joins** (output rows ≫ input rows): almost always a dimension join without the Type 2
+  date predicate, or a bridge used without weighting.
+- **Result cache:** identical queries within 24 hours are free if the data hasn't changed.
+
+<Quiz questions={[
+  {question: 'Which tables should usually be non-transient on Snowflake?', options: ['All marts', 'Snapshots and other stateful tables (like dim_audit) that cannot be rebuilt', 'Staging views', 'Aggregates'], answer: 1, explanation: 'Rebuildable tables do not need Fail-safe; tables holding history that only exists there do.'},
+  {question: 'When is cluster_by worth configuring?', options: ['On every model', 'On large fact tables, on the columns most queries filter by (usually date)', 'On dimensions', 'Never on Snowflake'], answer: 1, explanation: 'Clustering costs credits; it pays off on large tables with consistent filter patterns.'},
+]} />

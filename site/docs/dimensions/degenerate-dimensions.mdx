@@ -1,0 +1,59 @@
+---
+title: Degenerate dimensions
+description: Transaction identifiers that live in the fact table with no dimension table of their own.
+sidebar_position: 5
+---
+
+# Degenerate dimensions
+
+<KimballRef chapters={[3, 6]} techniques={['Degenerate Dimensions']}>
+Introduced with the POS transaction number (Ch. 3); revisited for order and invoice numbers (Ch. 6).
+</KimballRef>
+
+A **degenerate dimension** is a dimension key in the fact table **with no dimension table**. It's typically the
+operational transaction number: POS ticket number, order number, invoice number, PO number.
+
+Why "degenerate"? Once you've moved everything interesting about the ticket into real dimensions (date, store,
+cashier, customer, promotion), there's nothing left to describe. A `dim_pos_transaction` table would contain
+only the ticket number itself.
+
+## In the lab
+
+| Fact | Degenerate dimension(s) |
+|---|---|
+| `fct_retail_sales` | `transaction_id`, `line_number`, `register_id` |
+| `fct_order_lines` | `order_number`, `line_number` |
+| `fct_procurement_transactions`, `fct_po_line_pipeline` | `po_number`, `po_line_number` |
+| `fct_gl_journal_lines` | `journal_entry_id` |
+| `fct_inventory_transactions` | `movement_id` |
+
+## What they're good for
+
+1. **Grouping lines into the parent document**: basket analysis, order size, invoice-level totals.
+2. **Part of the grain / merge key**: `(transaction_id, line_number)` is the unique key for incremental loads.
+3. **Traceability**: auditors and support teams can find the source document.
+
+```sql
+-- Basket size distribution: degenerate dimension as the grouping key
+select items_in_basket, count(*) as baskets
+from (
+    select transaction_id, sum(sales_quantity) as items_in_basket
+    from fct_retail_sales
+    group by transaction_id
+)
+group by 1 order by 1;
+```
+
+## When it's *not* degenerate
+
+If the header has real attributes that aren't already captured by other dimensions (order channel, order type,
+payment terms, gift flag), you have options:
+
+- put low-cardinality header flags in a [junk dimension](./junk-dimensions), as the lab's `dim_order_profile` does;
+- keep order-level measures in an order-grain fact (`fct_order_fulfillment`);
+- rarely, build a true order dimension. This is usually a smell, because the "order dimension" ends up nearly as
+  big as the fact table.
+
+<Quiz questions={[
+  {question: 'Why does Kimball not create a dim_order table for the order number?', options: ['Order numbers are secret', 'After other dimensions capture the context, the order has no remaining descriptive attributes', 'Snowflake has a column limit', 'Order numbers are not unique'], answer: 1, explanation: 'All descriptive context lives in date, customer, product and so on; the order number alone remains, so it sits in the fact as a degenerate dimension.'},
+]} />

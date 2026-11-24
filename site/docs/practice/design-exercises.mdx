@@ -1,0 +1,117 @@
+---
+title: Design exercises
+description: Scenario-based dimensional design exercises with model solutions.
+sidebar_position: 1
+---
+
+# Design exercises
+
+For each scenario: **(1)** name the business process, **(2)** declare the grain, **(3)** list dimensions (with roles
+and SCD types for key attributes), **(4)** list facts with additivity. Then sketch the star.
+
+---
+
+## 1. Gym memberships and check-ins
+
+*A chain of climbing gyms sells monthly memberships and day passes. Members scan a card at check-in. Management wants
+utilization by gym and hour, membership churn, and revenue.*
+
+<details>
+<summary>Solution</summary>
+
+At least three fact tables:
+
+| Fact | Type | Grain | Facts |
+|---|---|---|---|
+| Check-ins | Transaction (factless + counter) | one row per check-in scan | check-in count |
+| Membership monthly snapshot | Periodic snapshot | member × month | active flag, monthly dues (additive), tenure months |
+| Membership lifecycle | Accumulating snapshot | membership | signup, first visit, freeze, cancel dates; lags |
+
+Dimensions: date, time of day (hour bands like "After-work rush"), gym (with region), member (Type 2 on home
+gym and membership tier; mini-dimension for age band and visit-frequency band), membership plan, pass type (junk:
+day pass / guest / member). Degenerate: scan id.
+
+Utilization = check-ins by gym × hour ÷ capacity (capacity from `dim_gym` or a capacity fact; drill-across).
+Churn = cancellations in month ÷ active members at the start of the month (from the snapshot).
+</details>
+
+---
+
+## 2. Ride-share trips
+
+*A ride-share company needs trip revenue, driver earnings, surge impact and rider ratings.*
+
+<details>
+<summary>Solution</summary>
+
+- **Process:** completed trips. **Grain:** one row per trip.
+- **Dimensions:** request date/time, pickup date/time, dropoff date/time (role-playing date and time, local + UTC);
+  pickup zone and dropoff zone (role-playing geography); rider; driver (Type 2 on vehicle and rating band);
+  vehicle class; payment method; trip profile junk (surge tier, shared vs solo, scheduled vs on-demand);
+  promotion. Degenerate: trip id.
+- **Facts:** fare, surge amount, tips, tolls, platform fee, driver payout (additive); distance and duration
+  (additive); rider rating (**non-additive**: average it; or store rating × 1 and a rating count).
+- Also an **accumulating snapshot** of trip lifecycle (requested → accepted → arrived → started → completed)
+  with lags, to analyze wait times and cancellations, which never become completed trips.
+</details>
+
+---
+
+## 3. Software subscriptions (SaaS)
+
+*A B2B SaaS company needs MRR, expansion and contraction, churn, and feature usage by account.*
+
+<details>
+<summary>Solution</summary>
+
+| Fact | Type | Grain |
+|---|---|---|
+| Subscription MRR snapshot | Periodic snapshot | account × product × month |
+| Subscription changes | Transaction | change event (new, upgrade, downgrade, cancel) with MRR delta |
+| Feature usage daily | Periodic snapshot (or aggregate of events) | account × feature × day |
+
+- MRR is **semi-additive** across months; **MRR deltas** (from the change fact) are additive and explain movement:
+  starting MRR + new + expansion − contraction − churn = ending MRR. A consolidated "MRR bridge" fact per
+  account × month holds those components.
+- Account dimension: Type 2 on segment, industry and owner (for "as was" attribution); durable key for
+  "as is" (Type 7).
+- Feature dimension with a feature-area hierarchy; a **bridge** if a usage event can touch multiple features.
+</details>
+
+---
+
+## 4. Warehouse shipments with multiple units of measure
+
+*A distributor ships in pallets, cases and eaches. Sales thinks in cases, finance in dollars, the warehouse in pallets.*
+
+<details>
+<summary>Solution</summary>
+
+Fact grain: one row per shipment line. Store quantity in **one standard unit** (eaches) plus extended amounts;
+put conversion factors (eaches per case, cases per pallet) on the **product dimension**, or on the fact when
+packaging varies by shipment. Optionally carry `quantity_cases` and `quantity_pallets` facts if the factors vary
+per shipment and users need fast access, but derive them all from one standard quantity in the same model so they
+can't disagree.
+</details>
+
+---
+
+## 5. Retail returns at Cascade Outfitters
+
+*Returns can happen in any store or by mail, for store or web purchases. Merchandising wants return rates by product,
+reason and original channel.*
+
+<details>
+<summary>Solution</summary>
+
+This is the [capstone](./capstone). Key decisions:
+
+- **Grain:** one row per returned product line.
+- **Dimensions:** return date, *original purchase date* (role), product (as of the **original sale**, or as of the return? Decide
+  and document; usually the original sale for rate calculations), return store (conformed `dim_store`, the Web
+  Store for mail returns), original store/channel (role-playing `dim_store`), customer, return reason (small
+  dimension with a reason group hierarchy), return condition (junk: resellable, opened, damaged).
+- **Degenerates:** return id, original transaction id / order number (lets you join back to the original sale).
+- **Facts:** returned quantity, refund amount, restocking fee (additive).
+- **Return rate** = returned units ÷ sold units by product × month: a drill-across, never a stored ratio.
+</details>

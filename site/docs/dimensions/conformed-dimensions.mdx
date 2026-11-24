@@ -1,0 +1,78 @@
+---
+title: Conformed and shrunken dimensions
+description: The integration backbone of the Kimball architecture, one dimension shared by many fact tables, plus rollup subsets.
+sidebar_position: 9
+---
+
+# Conformed and shrunken dimensions
+
+<KimballRef chapters={[4, 19]} techniques={['Conformed Dimensions', 'Shrunken Dimensions', 'Drilling Across', 'Enterprise Data Warehouse Bus Architecture']}>
+Inventory (Ch. 4) introduces conformed dimensions and the bus architecture; Ch. 19 discusses the "conforming
+system" and "dimension manager" responsibilities.
+</KimballRef>
+
+## Conformed dimensions
+
+A dimension is **conformed** when it means the same thing, with the same keys, attribute names, values and
+definitions, in every fact table that uses it. In the lab, `dim_product`, `dim_store` and `dim_date` are shared by:
+
+| | `dim_date` | `dim_product` | `dim_store` | `dim_customer` | `dim_vendor` | `dim_account` | `dim_employee` |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `fct_retail_sales` | ✓ | ✓ | ✓ | ✓ | | | ✓ |
+| `fct_inventory_daily_snapshot` | ✓ | ✓ | ✓ | | | | |
+| `fct_procurement_transactions` | ✓ | ✓ | | | ✓ | | |
+| `fct_order_lines` | ✓ | ✓ | ✓ | ✓ | | | |
+| `fct_gl_journal_lines` | ✓ | | ✓ | | | ✓ | |
+| `fct_employee_events` | ✓ | | ✓ | | | | ✓ |
+
+(That's the start of a [bus matrix](/bus/bus-matrix).)
+
+Conformance is what makes **drilling across** possible: comparing sales to inventory to receipts *by the same
+category, store and fiscal month*, with confidence that "Camping" means the same thing in all three.
+
+## How dbt makes conformance natural
+
+Conformance used to be an organizational challenge with separate ETL jobs per mart. In dbt it's structural:
+
+- **One model per conformed dimension** (`models/marts/core/`), referenced by every fact via `ref()`.
+- **Facts never re-derive dimension attributes.** They look up keys; descriptive columns come from the dimension.
+- **Tests on the dimension protect everyone**: uniqueness, SCD integrity, accepted values.
+- **Lineage shows the blast radius**: `dbt ls -s dim_product+` lists every model affected by a change.
+
+:::caution The anti-pattern
+Two teams each build "a product dimension" with slightly different category logic. Every cross-process
+report then disagrees and nobody knows which to trust. Kimball's bus architecture exists to prevent this,
+and in dbt it's prevented by having **exactly one `dim_product` model**.
+:::
+
+## Shrunken dimensions
+
+A **shrunken dimension** is a conformed subset of a base dimension, either:
+
+- **a rollup**: fewer rows at a coarser grain (month instead of day, category instead of product), for
+  aggregate fact tables or for facts that genuinely exist only at that grain, such as *monthly budgets by category*;
+- **a column/row subset**: e.g. only the products a particular department buys.
+
+The rule: attribute names and values must be **identical** to the base dimension, so the two stay drillable
+together.
+
+<Tabs>
+<TabItem value="month" label="dim_month (rollup of dim_date)">
+
+<DbtFile path="models/marts/aggregates/dim_month.sql" />
+
+</TabItem>
+<TabItem value="cat" label="dim_product_category (rollup of dim_product)">
+
+<DbtFile path="models/marts/aggregates/dim_product_category.sql" />
+
+</TabItem>
+</Tabs>
+
+Because they're built **from** the base dimensions in dbt, conformance is guaranteed: `year_month` in `dim_month`
+is literally the same expression as in `dim_date`.
+
+<Quiz questions={[
+  {question: 'What does it mean for a dimension to be conformed?', options: ['It has passed dbt tests', 'It has identical keys, attributes and meaning wherever it is used across fact tables', 'It is a Type 1 dimension', 'It is stored in a core schema'], answer: 1, explanation: 'Conformed dimensions share structure and content across business processes, enabling drill-across.'},
+  {question: 'Budgets are set by category by month. Which dimensions should the budget fact use?', options: ['dim_product and dim_date with fake product rows', 'Shrunken rollup dimensions at category and month grain, conformed with dim_product and dim_date', 'A separate unrelated budget_category table', 'No dimensions'], answer: 1, explanation: 'Shrunken rollups keep the budget fact at its natural grain while staying conformed for drill-across with actuals.'},
+]} />

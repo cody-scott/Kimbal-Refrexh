@@ -1,0 +1,27 @@
+---
+title: "Module 6: Kimball in dbt"
+sidebar_label: Overview
+description: Project structure, naming, incremental facts, testing, contracts, the semantic layer, Snowflake performance, and Kimball's ETL subsystems mapped to dbt.
+sidebar_position: 0
+---
+
+# Module 6: Kimball in dbt
+
+Kimball's books predate dbt, but the mapping is remarkably clean: dbt's layering, `ref()` graph, tests and
+semantic layer implement much of what Kimball calls the ETL "back room" and the "presentation area".
+
+| Lesson | What you'll learn |
+|---|---|
+| [Project structure and layers](/dbt/project-structure) | staging → intermediate → marts, materializations, schemas |
+| [Naming conventions](/dbt/naming-conventions) | Model and column names that make a star self-documenting |
+| [Incremental fact tables](/dbt/incremental-facts) | merge vs append vs insert_overwrite, lookbacks, late data, full refreshes |
+| [Testing dimensional models](/dbt/testing-dimensional-models) | Grain, RI, SCD, reconciliation and unit tests |
+| [Contracts, docs and governance](/dbt/contracts-and-governance) | Model contracts, constraints, persisted docs, groups and access |
+| [The dbt Semantic Layer on a star](/dbt/semantic-layer) | Semantic models, entities, measures and metrics over Kimball facts |
+| [Snowflake performance and cost](/dbt/snowflake-performance) | Clustering, warehouse sizing, transient tables, MERGE costs |
+| [Kimball's ETL subsystems in dbt](/dbt/etl-subsystems-in-dbt) | Which dbt feature implements which Kimball responsibility |
+
+<KimballRef chapters={[19, 20]}>
+Kimball's Ch. 19 lists the 34 subsystems of an ETL system; Ch. 20 covers designing and developing it. Much of
+that list is now provided by dbt and Snowflake. See [the mapping](/dbt/etl-subsystems-in-dbt).
+</KimballRef>

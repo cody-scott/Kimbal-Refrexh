@@ -1,0 +1,57 @@
+---
+title: "Types 0 and 1: retain original, overwrite"
+sidebar_label: Types 0 and 1
+description: The two simplest SCD responses, never change and overwrite, and when each is right.
+sidebar_position: 1
+---
+
+# Types 0 and 1: retain original, overwrite
+
+<KimballRef chapters={[5]} techniques={['Type 0: Retain Original', 'Type 1: Overwrite']} />
+
+## Type 0: retain original
+
+The attribute **never changes** once set, by definition. Examples:
+
+- original credit score at account opening;
+- the product's *launch* category;
+- customer's original acquisition channel;
+- a date of birth (changes are corrections, if allowed at all).
+
+Type 0 is a statement about meaning: "original X" is a different attribute from "current X". It's common to carry
+both.
+
+<DbtFile path="models/marts/scd_lab/scd_type0_product.sql" />
+
+## Type 1: overwrite
+
+The new value **replaces** the old one. There's one row per natural key, and history is lost.
+
+<DbtFile path="models/marts/scd_lab/scd_type1_product.sql" />
+
+What happens to reports:
+
+| Report run... | SKU-2004 Jan–Feb sales appear under |
+|---|---|
+| Before 2025-03-01 | Footwear |
+| After 2025-03-01 | **Socks & Accessories**, so last month's report changed retroactively |
+
+Type 1 is right when:
+
+- the change is a **correction** (a typo in the product name, a wrong postal code);
+- nobody needs history of the attribute (e.g. a manager's phone number);
+- the business explicitly wants everything restated to the current structure.
+
+In dbt, Type 1 is the default: a dimension **rebuilt from the current source** is Type 1. That's convenient and
+also dangerous: you get Type 1 *by accident* unless you deliberately preserve history.
+
+:::warning Type 1 breaks aggregates
+If an [aggregate table](/advanced/aggregates-and-shrunken-dimensions) was built by category, a Type 1 change to a
+product's category makes it stale. In dbt, rebuild aggregates in the same run as their dimensions (it's the DAG
+default), or use the durable key to the current dimension as the lab's aggregate does.
+:::
+
+<Quiz questions={[
+  {question: 'A product name had a typo ("Trialblazer"). Which SCD type is appropriate?', options: ['Type 0', 'Type 1', 'Type 2', 'Type 3'], answer: 1, explanation: 'Corrections should overwrite. Nobody wants a history of typos.'},
+  {question: 'In a dbt project, what SCD behaviour do you get by default when a dimension is rebuilt from the current source table?', options: ['Type 0', 'Type 1', 'Type 2', 'None'], answer: 1, explanation: 'Rebuilding from current state overwrites everything: Type 1. Preserving history needs snapshots or change logs.'},
+]} />

@@ -1,0 +1,92 @@
+---
+title: "Types 5, 6 and 7: hybrid techniques"
+sidebar_label: Types 5, 6 and 7
+description: Combining Type 1 and Type 2 so users can report "as was" and "as is" from the same model.
+sidebar_position: 5
+---
+
+# Types 5, 6 and 7: hybrid techniques
+
+<KimballRef chapters={[5]} techniques={['Type 5: Add Mini-Dimension and Type 1 Outrigger', 'Type 6: Add Type 1 Attributes to Type 2 Dimension', 'Type 7: Dual Type 1 and Type 2 Dimensions']} />
+
+The most common real requirement isn't "history" or "current" but **both**: "show me last year's sales by the
+category *at the time*, and also by *today's* categories". The hybrid types are different ways to provide both.
+
+## Type 5: mini-dimension + Type 1 outrigger (4 + 1)
+
+Add to the base dimension the key of the entity's **current** mini-dimension row, overwritten (Type 1) whenever
+it changes. You can now report on *current* demographics directly from the customer dimension, without going
+through facts.
+
+<DbtFile path="models/marts/scd_lab/scd_type5_customer.sql" />
+
+```sql
+-- How many customers are currently in each income band? (no facts needed)
+select d.income_band, count(distinct c.customer_id) as customers
+from scd_type5_customer c
+join dim_customer_demographics d on d.customer_demographics_key = c.current_customer_demographics_key
+where c.is_current
+group by 1;
+```
+
+## Type 6: Type 1 attributes on a Type 2 dimension (1 + 2 + 3)
+
+Each Type 2 row carries both the **historical** value (as of that version) and the **current** value
+(overwritten on *every* version of the entity). One fact-to-dimension join then supports both perspectives.
+
+<DbtFile path="models/marts/scd_lab/scd_type6_product.sql" />
+
+| product_key | sku | historical_category | current_category | valid_from |
+|---|---|---|---|---|
+| `…` | SKU-1006 | Camp Kitchen | Fuel & Consumables | 1900-01-01 |
+| `…` | SKU-1006 | Fuel & Consumables | Fuel & Consumables | 2025-02-15 |
+| `…` | SKU-1006 | Fuel & Consumables | Fuel & Consumables | 2025-05-20 |
+
+```sql
+select current_category, historical_category, sum(f.extended_net_sales_amount)
+from fct_retail_sales f
+join scd_type6_product p on p.product_key = f.product_key
+group by all;
+```
+
+**Cost:** every Type 1 change rewrites *every* historical row of that entity. In dbt with a rebuilt dimension
+that's free; in classic incremental ETL it's an expensive update.
+
+## Type 7: dual Type 1 and Type 2 dimensions
+
+The fact carries **two keys** for the same dimension:
+
+- the **surrogate key** (`product_key`) → the Type 2 dimension, for **as was**;
+- the **durable key** (`product_durable_key`) → a current-rows-only view, for **as is**.
+
+<DbtFile path="models/marts/scd_lab/scd_type7_product_current.sql" />
+
+The analysis query in the lab puts both perspectives side by side:
+
+<DbtFile path="analyses/as_was_vs_as_is.sql" />
+
+| perspective | category | net_sales |
+|---|---|---|
+| as was (Type 2 join) | Footwear | 17,034.00 |
+| as was (Type 2 join) | Socks & Accessories | 42,202.80 |
+| as is (Type 7 durable-key join) | Socks & Accessories | 59,236.80 |
+
+The totals match (17,034.00 + 42,202.80 = 59,236.80): same facts, different attribution.
+
+## Which hybrid?
+
+| | Type 5 | Type 6 | Type 7 |
+|---|---|---|---|
+| Solves | Current profile for mini-dim attributes | As-was and as-is from one join | As-was and as-is by choice of join |
+| Extra cost | One outrigger key on base dim | Current columns on every row; rewrites on change | Extra durable key on the fact; one view |
+| BI friendliness | Good | Excellent (one table) | Good (two "versions" of the dimension to expose) |
+| dbt fit | Good | Excellent when dimensions are rebuilt | Excellent: the current view is free |
+
+The lab's production `fct_retail_sales` carries `product_durable_key`, so Type 7 is available on the main
+fact. That's a cheap, flexible default for any Type 2 dimension.
+
+<Quiz questions={[
+  {question: 'Which type adds current-value columns to every row of a Type 2 dimension?', options: ['Type 5', 'Type 6', 'Type 7', 'Type 3'], answer: 1, explanation: 'Type 6 = Type 1 attributes on a Type 2 dimension (1 + 2 + 3).'},
+  {question: 'In Type 7, how do you get "as is" reporting?', options: ['Filter is_current = true on the Type 2 join', 'Join the fact\'s durable key to a current-rows view', 'Use a mini-dimension', 'Rebuild the fact'], answer: 1, explanation: 'Filtering is_current on a surrogate-key join would DROP historical facts. The durable key reaches the current row for every fact.'},
+  {question: 'Why is "join on product_key and filter is_current" NOT a correct way to get as-is reporting?', options: ['It is correct', 'It drops every fact that points to a non-current version', 'It double counts', 'It is too slow'], answer: 1, explanation: 'Facts recorded under old versions point to non-current rows, so filtering to current rows excludes them. This is a very common bug.'},
+]} />

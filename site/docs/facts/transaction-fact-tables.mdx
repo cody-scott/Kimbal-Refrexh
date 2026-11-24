@@ -1,0 +1,104 @@
+---
+title: Transaction fact tables
+description: The workhorse fact table, one row per measurement event, implemented as an incremental dbt model on Snowflake.
+sidebar_position: 2
+---
+
+# Transaction fact tables
+
+<KimballRef chapters={[3, 6]} techniques={['Transaction Fact Tables', 'Fact Table Structure']}>
+Retail sales (Ch. 3) and order transactions (Ch. 6) are the canonical examples.
+</KimballRef>
+
+A **transaction fact table** has one row per measurement event at a point in space and time: a ticket line
+scanned, an order line placed, a journal line posted. It's the most common and most flexible fact table:
+
+- **Atomic and dimensional**: every row has full context, so anything can be rolled up.
+- **Sparse**: a row exists only when something happened. No sale, no row.
+- **Insert-only**: transactions don't change after the fact. Corrections arrive as new, reversing transactions.
+
+## Cascade's retail sales fact
+
+<DbtFile path="models/marts/retail/fct_retail_sales.sql" />
+
+Things to notice:
+
+1. **Point-in-time joins to Type 2 dimensions.** `s.transaction_ts >= p.valid_from and s.transaction_ts < p.valid_to`
+   picks the product *version* in force when the sale happened. See [Type 2](/scd/type-2).
+2. **No null foreign keys.** `dim_key()` wraps `coalesce(key, '-1')` so unmatched rows point at the Unknown
+   member rather than disappearing from inner joins.
+3. **Business-meaningful special rows.** Anonymous shoppers are `'-2'`, not unknown: they're a real case,
+   not a data error.
+4. **Extended, additive facts only.**
+5. **Degenerate dimensions** (`transaction_id`, `line_number`) give basket analysis and the merge key.
+
+## Incremental loading in dbt
+
+Transaction facts are the largest tables in the warehouse, so they're usually `incremental`:
+
+```sql
+{{
+  config(
+    materialized='incremental',
+    unique_key=['transaction_id', 'line_number'],
+    incremental_strategy='merge',
+    cluster_by=['date_key']
+  )
+}}
+...
+{% if is_incremental() %}
+where transaction_date >= (select dateadd(day, -3, max(transaction_date)) from {{ this }})
+{% endif %}
+```
+
+- **`merge` with the grain as `unique_key`** makes reruns idempotent: reprocessing a window updates rather
+  than duplicates.
+- **A lookback window** (3 days here) catches late-arriving source rows. Size it from how late your data
+  really arrives.
+- **`cluster_by=['date_key']`** helps Snowflake prune micro-partitions for date-filtered queries. Only worth it
+  on large tables.
+
+More on this in [Incremental fact tables](/dbt/incremental-facts).
+
+## Querying
+
+```sql
+-- Basket analysis: average basket value and size, by store and weekday/weekend.
+select
+    s.store_name,
+    d.weekday_indicator,
+    count(distinct f.transaction_id)                                   as baskets,
+    sum(f.extended_net_sales_amount) / count(distinct f.transaction_id) as avg_basket_value,
+    sum(f.sales_quantity) / count(distinct f.transaction_id)           as avg_units_per_basket
+from fct_retail_sales f
+join dim_store s on s.store_key = f.store_key
+join dim_date d  on d.date_key = f.date_key
+group by all
+order by 1, 2;
+
+-- Product affinity: which products are bought together on the same ticket?
+select a.product_key as product_a, b.product_key as product_b, count(*) as baskets_together
+from fct_retail_sales a
+join fct_retail_sales b
+  on  b.transaction_id = a.transaction_id
+  and b.product_key > a.product_key
+group by all
+order by baskets_together desc
+limit 20;
+```
+
+Neither query is possible against a daily summary. That's the payoff of atomic grain.
+
+## Pitfalls
+
+- **Updating transactions in place.** If the source "edits" an order line, prefer storing a reversing and a new
+  transaction (or an accumulating snapshot) so history reconciles.
+- **Natural keys as fact foreign keys.** Joining facts to dimensions on `sku` breaks the moment you add Type 2
+  history. Store the surrogate `product_key`.
+- **Fanning out on load.** Any join to a dimension that isn't unique on the join predicate multiplies rows.
+  Always test row counts against the source.
+
+<Quiz questions={[
+  {question: 'A POS ticket line is voided an hour later. How should the transaction fact reflect this?', options: ['Delete the original row', 'Update the original row\'s quantity to zero', 'Insert a reversing transaction (negative quantity/amounts)', 'Ignore it'], answer: 2, explanation: 'Transaction facts are insert-only records of events. A void is itself an event; reversing rows keep totals right and preserve the audit trail.'},
+  {question: 'Why is the lab\'s unique_key for the merge [transaction_id, line_number]?', options: ['They are the clustering keys', 'They implement the declared grain, so reruns update instead of duplicating', 'dbt requires two columns', 'They are surrogate keys'], answer: 1, explanation: 'The merge key must be the grain. Anything coarser collapses rows; anything finer allows duplicates.'},
+]} />

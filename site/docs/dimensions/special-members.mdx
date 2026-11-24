@@ -1,0 +1,91 @@
+---
+title: "Special members: unknown, not applicable, late"
+description: Default dimension rows for unknown, not-applicable and not-yet-known values, and inferred members for late-arriving dimensions.
+sidebar_position: 4
+---
+
+# Special members: unknown, not applicable, late
+
+<KimballRef chapters={[3, 19]} techniques={['Null Attributes in Dimensions', 'Late Arriving Dimensions', 'Nulls in Fact Tables']}>
+Ch. 19 describes the "special dimensions manager" and "late arriving data handler" ETL subsystems.
+</KimballRef>
+
+Real data is messy: facts arrive referencing members you can't find, events legitimately lack a value, and
+dimension records show up after the facts that use them. Kimball handles all three with **special dimension
+rows** instead of nulls or dropped facts.
+
+## The special rows
+
+| Situation | Example | Lab key | Label |
+|---|---|---|---|
+| Value expected but missing or unmatched | Sale with a promo code not in the promotion master | `'-1'` | "Unknown Promotion" |
+| Value legitimately not applicable | Sale to a walk-in shopper with no loyalty card | `'-2'` | "Anonymous Shopper" |
+| Milestone not reached yet | Order not shipped | `-2` (date) | "Not Yet Happened" |
+| Explicitly "none" as a business state | No promotion in effect | hash of `'NONE'` | "No Promotion in Effect" |
+
+The distinction between *unknown* and *not applicable* is worth keeping: unknown is a **data-quality
+signal** you should monitor, while not applicable is a **business fact**.
+
+```sql
+-- Monitor unknowns: a rising count means an upstream problem
+select d.year_month, count(*) as sales_with_unknown_product
+from fct_retail_sales f
+join dim_date d on d.date_key = f.date_key
+where f.product_key = '-1'
+group by 1 order by 1;
+```
+
+In dbt, you can turn that into a test with a threshold:
+
+```yaml
+- name: product_key
+  data_tests:
+    - dbt_utils.expression_is_true:
+        arguments:
+          expression: "<> '-1'"
+        config:
+          severity: warn
+          warn_if: ">10"
+```
+
+## Late-arriving dimensions (inferred members)
+
+Sometimes a fact arrives **before** its dimension record: an HR event for a new hire whose master record
+hasn't been loaded, or a sale of a SKU set up in the POS before the merchandising system publishes it.
+
+Options, from worst to best:
+
+1. **Drop the fact**: totals are wrong and nobody knows.
+2. **Point it at Unknown (`-1`)**: totals are right, but when the member arrives, old facts stay on Unknown.
+3. **Create an inferred member**: insert a placeholder row for the new natural key with whatever you know,
+   flag it, and point the fact at it. When the real record arrives, **overwrite the placeholder (Type 1)** and the
+   facts are already attached.
+
+The lab's employee dimension does option 3: HR events for E015 and E016 arrive with no employee master record.
+
+<DbtFile path="models/marts/core/dim_employee.sql" lines={[1, 29]} />
+
+In the built table:
+
+| employee_id | employee_name | job_title | row_change_reason | is_inferred_member |
+|---|---|---|---|---|
+| E011 | Hayden Walsh | Sales Associate | HIRE | false |
+| E011 | Hayden Walsh | Senior Sales Associate | PROMOTION | false |
+| E015 | Inferred: E015 | Sales Associate | HIRE | true |
+
+:::tip Why this is easy in dbt
+Because dbt rebuilds the dimension from sources each run, "overwrite the inferred member when the real record
+arrives" happens automatically: the next build finds the master record and the `coalesce` picks real values.
+Keys stay stable because they hash the natural key, not the attributes.
+:::
+
+## Late-arriving facts
+
+The reverse case, a fact for an old date arriving late, is covered in
+[Late-arriving data](/advanced/late-arriving-data). The fact must be matched to the dimension version in force
+*at the event time*, not the current one.
+
+<Quiz questions={[
+  {question: 'A sale references customer C9999 which is not (yet) in the customer master. With an inferred-member strategy, what happens?', options: ['The sale is dropped', 'The sale points to Unknown forever', 'A placeholder customer row for C9999 is created and flagged; it is overwritten when the real record arrives', 'The pipeline fails'], answer: 2, explanation: 'Inferred members keep the fact attached to the right entity, so it reports correctly once the real attributes arrive.'},
+  {question: 'Why keep separate Unknown and Not Applicable rows?', options: ['Snowflake requires two', 'Unknown signals a data problem; Not Applicable is a legitimate business state', 'For performance', 'They are always interchangeable'], answer: 1, explanation: 'Mixing them hides data-quality issues inside legitimate cases.'},
+]} />

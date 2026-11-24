@@ -1,0 +1,107 @@
+---
+title: The date dimension
+description: Building a rich calendar and fiscal date dimension with Snowflake's generator, plus time of day and time zones.
+sidebar_position: 2
+---
+
+# The date dimension
+
+<KimballRef chapters={[3, 7, 12]} techniques={['Calendar Date Dimensions', 'Role-Playing Dimensions', 'Multiple Time Zones']}>
+Ch. 3 introduces the date dimension; Ch. 7 adds multiple fiscal calendars; Ch. 12 covers time zones and
+country-specific calendars.
+</KimballRef>
+
+Every fact table has at least one date. Kimball insists on a **date dimension table** rather than letting
+queries call date functions, because:
+
+- business calendars (fiscal periods, retail 4-5-4 weeks, holidays, paydays, seasons) **can't be computed**
+  from a date with SQL functions;
+- labels like "Weekend", "FY2025-Q2" or "Holiday" become simple filters any tool can use;
+- one definition means every report agrees on what "Q2" means.
+
+It's tiny: 20 years is about 7,300 rows. Build it generously, decades into the past and future.
+
+## The lab's `dim_date`
+
+<DbtFile path="models/marts/core/dim_date.sql" />
+
+### Snowflake-specific notes
+
+- `table(generator(rowcount => N))` creates N rows. `seq4()` alone **can have gaps**, so the model wraps it in
+  `row_number()` for a contiguous day sequence. The row count is computed in Jinja from the project vars.
+- `dayofweekiso()` returns Monday = 1 regardless of the `WEEK_START` session parameter, which is safer than `dayofweek()`.
+- Fiscal attributes are computed by shifting the date one month back (`dateadd(month, -1, d)`), so a February
+  1 fiscal start becomes month 1.
+
+## Attribute checklist
+
+A production date dimension commonly carries:
+
+| Group | Attributes |
+|---|---|
+| Day | full date, day name, day of week / month / year numbers, weekday/weekend indicator |
+| Week | ISO week number, week start date, retail week |
+| Month | month number/name, year-month label, month start/end, month-end indicator |
+| Quarter/Year | calendar quarter, calendar year, year-quarter label |
+| Fiscal | fiscal year, quarter, period, week (one set per fiscal calendar in use) |
+| Events | holiday indicator and name, selling season, payday, special event, store-closed flag |
+| Relative | "is current month", "days ago" (compute in a view or the semantic layer, since they change daily) |
+
+:::caution Relative attributes go stale
+Attributes like `is_current_month` change every day. Either rebuild `dim_date` daily, or keep them in a view
+over the table so they're computed at query time.
+:::
+
+## Time of day
+
+Kimball separates **date** from **time of day**: a time-of-day dimension (1,440 minutes or 86,400 seconds)
+supports attributes such as "lunch rush" or "after close". If you only need the precise moment, keep a
+timestamp on the fact. The lab keeps `transaction_ts` on `fct_retail_sales` for this.
+
+```sql
+-- Hourly sales curve straight from the timestamp
+select hour(transaction_ts) as hour_of_day, sum(extended_net_sales_amount) as net_sales
+from fct_retail_sales
+group by 1 order by 1;
+```
+
+## Multiple time zones
+
+For a business across time zones, decide which clock each date key means. Kimball's approach: carry **two date
+(and time) roles**, local and a standard reference such as UTC. In dbt:
+
+```sql
+{{ date_key("convert_timezone('UTC', s.store_time_zone, s.event_ts_utc)::date") }} as local_date_key,
+{{ date_key('s.event_ts_utc::date') }}                                               as utc_date_key,
+```
+
+## Querying
+
+```sql
+-- Weekday vs weekend vs holiday performance: pure dimension filters, no date math
+select d.weekday_indicator, d.holiday_indicator,
+       avg(daily_sales) as avg_daily_net_sales
+from (
+  select f.date_key, sum(f.extended_net_sales_amount) as daily_sales
+  from fct_retail_sales f group by 1
+) x
+join dim_date d on d.date_key = x.date_key
+group by all;
+```
+
+<Quiz questions={[
+  {question: 'Why use a date dimension table instead of SQL date functions in every query?', options: ['Date functions are slow in Snowflake', 'Business calendars (fiscal periods, holidays) cannot be derived from a date with functions, and one table keeps every report consistent', 'BI tools cannot parse dates', 'It saves storage'], answer: 1, explanation: 'Fiscal calendars, holidays and seasons are business rules. The dimension computes them once, consistently.'},
+  {question: 'Why does the lab use row_number() over (order by seq4()) instead of seq4() directly?', options: ['seq4() is deprecated', 'seq4() values are not guaranteed to be gap-free', 'row_number() is faster', 'To randomize dates'], answer: 1, explanation: 'Snowflake documents that seq functions may have gaps; row_number() over them guarantees a contiguous sequence.'},
+]} />
+
+## Exercise
+
+<details>
+<summary>Add a retail 4-5-4 calendar: fiscal weeks grouped into months of 4, 5 and 4 weeks. What would you add, and how?</summary>
+
+Add columns `retail_week_of_year`, `retail_month_number`, `retail_quarter` and `retail_year`. The 4-5-4 pattern
+can't be computed with standard functions, especially in 53-week years, so most teams maintain it as a
+**seed** (one row per retail week with its start and end dates), joined into `dim_date` on
+`full_date between week_start and week_end`. It's another example of business calendar knowledge belonging
+in data, not code.
+</details>

@@ -1,0 +1,93 @@
+---
+title: dbt snapshots vs change logs
+description: Two ways to get Type 2 history in dbt, what each can and can't capture, and how to choose.
+sidebar_position: 6
+---
+
+# dbt snapshots vs change logs
+
+<KimballRef chapters={[19]} techniques={['Type 2: Add New Row']}>
+Kimball's "slowly changing dimension manager" and "change data capture" ETL subsystems (Ch. 19) are the
+responsibilities these dbt features implement.
+</KimballRef>
+
+There are two ways to build Type 2 history in dbt, and they work on different principles.
+
+## Option A: dbt snapshots (observe and compare)
+
+A **snapshot** compares the current state of a source to what it saw last time, and records a new version when
+something differs. The lab defines two (dbt 1.9+ YAML syntax):
+
+<DbtFile path="snapshots/snapshots.yml" />
+
+| Strategy | How it detects change | Use when |
+|---|---|---|
+| `timestamp` | `updated_at` is newer than the stored version's | The source maintains a reliable `updated_at` |
+| `check` | Any column in `check_cols` differs | No trustworthy `updated_at`; you want specific columns only |
+
+Snapshot output columns: `dbt_scd_id`, `dbt_updated_at`, `dbt_valid_from`, `dbt_valid_to` (plus
+`dbt_is_deleted` with `hard_deletes: new_record`). With `dbt_valid_to_current` set, current rows get a far-future
+date instead of null.
+
+Then build the dimension **from** the snapshot:
+
+```sql
+-- models/marts/core/dim_product_from_snapshot.sql (alternative to the change-log build)
+select
+    {{ dbt_utils.generate_surrogate_key(['sku', 'dbt_valid_from']) }} as product_key,
+    {{ dbt_utils.generate_surrogate_key(['sku']) }}                   as product_durable_key,
+    sku, product_name, brand, category, department, package_size,
+    dbt_valid_from                                                    as valid_from,
+    dbt_valid_to                                                      as valid_to,
+    dbt_valid_to = '9999-12-31 23:59:59'::timestamp_ntz               as is_current
+from {{ ref('snap_products') }}
+```
+
+### What snapshots can't do
+
+- **They only see what exists when they run.** Two changes between runs collapse into one. A change that's
+  reverted before the next run is invisible.
+- **History starts the day you start snapshotting.** You can't reconstruct last year.
+- **They are state, not code.** A snapshot table can't be rebuilt from the source. Lose it (or `--full-refresh`
+  a model built on it carelessly) and history is gone. Treat snapshot tables like source data: back them up and
+  don't drop them.
+- **Effective dates are load times**, not business effective dates, unless the source's `updated_at` is
+  trustworthy (timestamp strategy).
+
+## Option B: change logs / CDC (reconstruct)
+
+If the source provides an **attribute-level change log** (CDC stream, audit table, ERP change documents,
+event-sourced history), you can **reconstruct** history deterministically, as the lab does:
+
+<DbtFile path="macros/scd2_from_change_log.sql" collapsed />
+
+| | dbt snapshot | Change-log reconstruction |
+|---|---|---|
+| Needs | Only the current-state table | A change log / CDC feed |
+| History before you started | ✗ | ✓ (as far back as the log goes) |
+| Captures every change | Only those visible between runs | ✓ |
+| Effective dates | Load time (or `updated_at`) | Business change timestamp |
+| Rebuildable from source | ✗ (stateful) | ✓ (stateless, idempotent) |
+| Complexity | Very low | Moderate (one macro) |
+
+### Snowflake-native options
+
+- **Streams** on a source table capture inserts, updates and deletes since the last consumption. Land them in an
+  append-only change table, then reconstruct as above.
+- **Time Travel** (`at(timestamp => ...)`) can recover recent prior states (up to the retention period) for a
+  one-off backfill. It isn't a long-term history strategy.
+- **Fivetran / Airbyte history mode** and similar loaders can deliver Type 2-style history tables
+  (`_fivetran_start`, `_fivetran_end`) that you treat as a change log.
+
+## Recommendation
+
+1. **Prefer a change log / CDC history** when one exists: it's complete, business-dated and rebuildable.
+2. **Use snapshots** when the source only exposes current state. Start them **as early as possible**
+   (history you didn't capture is gone), run them at least as often as the source changes, and protect the tables.
+3. **Either way, put the history logic in one place** (snapshot or intermediate model), and build every
+   dimension from it. Never mix approaches for the same entity.
+
+<Quiz questions={[
+  {question: 'A product\'s category changes at 09:00 and changes back at 15:00. Snapshots run nightly. What does the snapshot record?', options: ['Two new versions', 'One new version', 'Nothing', 'An error'], answer: 2, explanation: 'At the next run the state matches the previous state, so no change is detected. A change log would capture both changes.'},
+  {question: 'Why should snapshot tables be treated like source data?', options: ['They are large', 'They cannot be rebuilt from the source once dropped; the history only exists there', 'dbt cannot read them', 'They contain PII'], answer: 1, explanation: 'Snapshots are stateful accumulations of observations; losing them loses history permanently.'},
+]} />

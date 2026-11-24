@@ -1,0 +1,12 @@
+# CI-only profile. CI has no Snowflake account, so it compiles the project
+# against DuckDB; scripts/smoke_test_duckdb.py then transpiles the compiled
+# Snowflake SQL to DuckDB with sqlglot and runs the DAG plus every data test.
+# This proves the logic. It is NOT a substitute for running on Snowflake.
+kimball_lab:
+  target: ci
+  outputs:
+    ci:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH', 'target/ci.duckdb') }}"
+      schema: dev
+      threads: 4

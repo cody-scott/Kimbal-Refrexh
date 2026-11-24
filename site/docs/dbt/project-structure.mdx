@@ -1,0 +1,78 @@
+---
+title: Project structure and layers
+description: How the lab project is organized, why each layer exists, and the materialization and schema choices.
+sidebar_position: 1
+---
+
+# Project structure and layers
+
+<KimballRef chapters={[1, 19]}>
+Kimball separates the ETL "back room" (staging, cleaning, conforming) from the "front room" presentation area
+(dimensional models users query). dbt's layers draw the same line.
+</KimballRef>
+
+## The layout
+
+```text
+dbt/
+├── dbt_project.yml
+├── packages.yml                    # dbt_utils
+├── seeds/                          # raw Cascade Outfitters data (stand-in for loaded sources)
+├── snapshots/snapshots.yml         # Type 2 by observation
+├── macros/
+│   ├── dimensional.sql             # unknown_key(), dim_key(), date_key(), scd_end_of_time()
+│   ├── get_unknown_member.sql      # unknown_member_row()
+│   ├── scd2_from_change_log.sql    # Type 2 by reconstruction
+│   └── generate_schema_name.sql
+├── models/
+│   ├── staging/cascade/            # stg_cascade__*: 1:1 with sources, views
+│   ├── intermediate/               # int_*: reusable logic (SCD history, allocation)
+│   ├── marts/
+│   │   ├── core/                   # conformed dimensions (+ dim_audit)
+│   │   ├── retail/ inventory/ procurement/ orders/ accounting/ hr/ crm/
+│   │   ├── aggregates/             # agg_* + shrunken dimensions
+│   │   └── scd_lab/                # SCD Types 0–7 side by side (teaching only)
+│   ├── semantic/                   # semantic models and metrics
+│   └── exposures.yml
+├── analyses/                       # business-question queries used in the lessons
+└── tests/                          # singular tests + generic/scd2_valid_ranges
+```
+
+## What each layer is for
+
+| Layer | Kimball analogue | Rules | Materialization |
+|---|---|---|---|
+| **Staging** | Extract, clean | One model per source table. Rename, cast, trim, decode, light cleaning. **No joins, no business logic.** | `view` |
+| **Intermediate** | Conform, manage SCDs, allocate | Reusable transformations used by more than one mart, or too complex to inline | `view` or `ephemeral`; `table` if expensive |
+| **Marts** | Presentation area | Dimensional models only: `dim_`, `fct_`, `bridge_`, `agg_`. What users and BI tools see. | `table` / `incremental` |
+
+<DbtFile path="dbt_project.yml" />
+
+## Why marts are tables
+
+Dimension and fact models are read far more often than they're built, and they join many inputs. Materializing
+them as **tables** means queries never re-execute the transformation logic. Role-playing and "current" views
+(`dim_ship_date`, `scd_type7_product_current`) are the exception: they're thin projections of a table.
+
+## Schemas
+
+The custom `generate_schema_name` macro gives:
+
+- **dev**: `<your_schema>_staging`, `<your_schema>_marts`, … (each developer isolated)
+- **prod**: `staging`, `marts`, …
+
+Grant BI tools access to **`marts` only**. Staging and intermediate are back-room implementation details,
+which is exactly Kimball's separation.
+
+<DbtFile path="macros/generate_schema_name.sql" />
+
+## Sources vs seeds
+
+The lab uses `ref('raw_...')` seeds so it's self-contained. In a real project, declare raw tables as **sources**
+and have staging select from `{{ source('pos', 'transactions') }}`. You then get freshness checks
+(`dbt source freshness`) and lineage from the loader.
+
+<Quiz questions={[
+  {question: 'Where should the logic that reconstructs Type 2 history from a change log live?', options: ['In the staging model', 'In an intermediate model (or macro) used by the dimension', 'In the BI tool', 'In every fact table'], answer: 1, explanation: 'Staging stays 1:1 with sources; reusable history logic belongs in intermediate, and the mart dimension builds on it.'},
+  {question: 'Which schema should BI tools be granted access to?', options: ['raw', 'staging', 'marts', 'all of them'], answer: 2, explanation: 'The presentation area (marts) is the contract with users; everything else is back room.'},
+]} />

@@ -1,0 +1,104 @@
+---
+title: "Case study: Inventory"
+sidebar_label: Inventory
+description: Store inventory as a periodic snapshot and as transactions, with semi-additive facts and drill-across to sales.
+sidebar_position: 2
+---
+
+# Case study: Inventory
+
+<KimballRef chapters={[4]} techniques={['Periodic Snapshot Fact Tables', 'Transaction Fact Tables', 'Accumulating Snapshot Fact Tables', 'Additive, Semi-Additive, Non-Additive Facts', 'Enterprise Data Warehouse Bus Matrix', 'Conformed Dimensions', 'Value Chain']} />
+
+## The business
+
+Store operations and supply chain ask:
+
+- How much is on hand, by product and store, today and on any past day?
+- What's our average inventory value this quarter? What are inventory turns and days of supply?
+- How much shrink do we have, and where?
+- When do receipts arrive, and how many?
+
+## Kimball's three inventory models
+
+| Model | Grain | Lab model | Answers |
+|---|---|---|---|
+| Periodic snapshot | product × store × day | `fct_inventory_daily_snapshot` | Levels, averages, turns |
+| Transactions | each movement | `fct_inventory_transactions` | Receipts, shrink, movement patterns |
+| Accumulating snapshot | each product *lot* from receipt to sell-out | (exercise) | Lot aging, time to sell through |
+
+## The models
+
+<Tabs>
+<TabItem value="snap" label="Snapshot">
+<DbtFile path="models/marts/inventory/fct_inventory_daily_snapshot.sql" />
+</TabItem>
+<TabItem value="txn" label="Transactions">
+<DbtFile path="models/marts/inventory/fct_inventory_transactions.sql" />
+</TabItem>
+<TabItem value="type" label="Movement type dim">
+<DbtFile path="models/marts/inventory/dim_inventory_movement_type.sql" />
+</TabItem>
+</Tabs>
+
+## Answering the questions
+
+```sql
+-- Average daily inventory value at cost by category, Q1 vs Q2
+select d.calendar_year_quarter, p.category, avg(daily_value) as avg_daily_inventory_value
+from (
+    select f.date_key, f.product_key, sum(f.inventory_value_at_cost) as daily_value
+    from fct_inventory_daily_snapshot f
+    group by all
+) x
+join dim_date d    on d.date_key = x.date_key
+join dim_product p on p.product_key = x.product_key
+group by all
+order by 1, 2;
+
+-- Shrink by store and month
+select s.store_name, d.year_month, -sum(f.quantity_change) as units_shrunk, -sum(f.value_change_at_cost) as shrink_cost
+from fct_inventory_transactions f
+join dim_inventory_movement_type t on t.inventory_movement_type_key = f.inventory_movement_type_key
+join dim_store s on s.store_key = f.store_key
+join dim_date d  on d.date_key = f.date_key
+where t.is_shrink
+group by all
+order by 1, 2;
+
+-- Days of supply: today's on hand / trailing 28-day average daily sales (drill-across)
+with on_hand as (
+    select product_key, store_key, quantity_on_hand
+    from fct_inventory_daily_snapshot
+    where date_key = (select max(date_key) from fct_inventory_daily_snapshot)
+),
+sales as (
+    select product_key, store_key, sum(sales_quantity) / 28 as avg_daily_units
+    from fct_retail_sales
+    where transaction_date > dateadd(day, -28, (select max(transaction_date) from fct_retail_sales))
+    group by all
+)
+select p.product_name, s.store_name, o.quantity_on_hand,
+       round(o.quantity_on_hand / nullif(x.avg_daily_units, 0), 1) as days_of_supply
+from on_hand o
+left join sales x using (product_key, store_key)
+join dim_product p on p.product_key = o.product_key
+join dim_store s   on s.store_key = o.store_key
+order by days_of_supply desc nulls first;
+```
+
+(The days-of-supply query joins on `product_key`, which works here because both sides are the *current* window. In
+general, drill across on durable keys or conformed attributes.)
+
+## Exercise
+
+<details>
+<summary>Design the accumulating snapshot for inventory <strong>lots</strong> (one row per lot received, tracking receipt, first sale, 50% sold, sold out).</summary>
+
+- **Grain:** one row per received lot (receipt line).
+- **Dates:** received, first sale, half sold, fully sold (each `-2` until reached).
+- **Dimensions:** product, store, vendor, (receipt) PO degenerate.
+- **Facts:** received quantity, remaining quantity (updated), received value, lags (received→first sale,
+  received→sold out), counters.
+- **Load:** rebuild per lot from receipts and an allocation of sales to lots (FIFO). The FIFO allocation is the
+  hard part, and belongs in an intermediate model.
+</details>

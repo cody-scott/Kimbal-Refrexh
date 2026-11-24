@@ -1,0 +1,38 @@
+---
+title: "Module 7: Case studies"
+sidebar_label: Overview
+description: End-to-end case studies following the industry chapters of The Data Warehouse Toolkit, built in the lab or designed on paper.
+sidebar_position: 0
+---
+
+# Module 7: Case studies
+
+The Data Warehouse Toolkit teaches through **industry case studies**, each introducing techniques in the context
+where they naturally arise. This module follows the same structure. Each case study goes through the four
+steps, a bus-matrix row, the design, the dbt implementation (where built) and the queries that matter to that
+business.
+
+## Built in the lab (Cascade Outfitters)
+
+| Case study | DWT3 chapter | Key techniques |
+|---|---|---|
+| [Retail sales](/case-studies/retail-sales) | 3 | Four-step process, atomic grain, date/product/store/promotion, factless coverage, degenerate dims |
+| [Inventory](/case-studies/inventory) | 4 | Periodic snapshots, semi-additive facts, transaction vs snapshot, drill-across |
+| [Procurement](/case-studies/procurement) | 5 | Single vs multiple transaction facts, accumulating snapshot, SCD types |
+| [Order management](/case-studies/order-management) | 6 | Role-playing dates, junk dims, allocation, currencies, fulfillment pipeline |
+| [Accounting](/case-studies/accounting) | 7 | GL snapshots, ragged chart of accounts, budget vs actual |
+| [Customer relationship management](/case-studies/crm) | 8 | Rich customer dimension, mini-dimensions, multivalued bridges, behavior segments |
+| [Human resources](/case-studies/human-resources) | 9 | Employee profile Type 2, headcount snapshot, recursive hierarchy |
+
+## Designed on paper
+
+| Case study | DWT3 chapter | Key techniques |
+|---|---|---|
+| [Financial services](/case-studies/financial-services) | 10 | Account snapshots, households, supertype/subtype products, dynamic bands |
+| [Transportation](/case-studies/transportation) | 12 | Segment vs trip grain, role-playing airports, time zones |
+| [Education](/case-studies/education) | 13 | Admissions accumulating snapshot, factless registration & attendance |
+| [Healthcare](/case-studies/healthcare) | 14 | Diagnosis bridge, billing vs clinical, measure type dimensions |
+| [E-commerce clickstream](/case-studies/ecommerce-clickstream) | 15 | Session and page grains, step dimension, profitability allocation |
+| [Insurance](/case-studies/insurance) | 16 | Policy transactions, premium snapshots, claims accumulating snapshot |
+
+<KimballRef chapters={[3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16]} />

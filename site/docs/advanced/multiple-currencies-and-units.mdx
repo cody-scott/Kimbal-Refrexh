@@ -1,0 +1,63 @@
+---
+title: Multiple currencies and units of measure
+description: Storing facts in both transaction and standard currency, conversion timing, and conformed units of measure.
+sidebar_position: 5
+---
+
+# Multiple currencies and units of measure
+
+<KimballRef chapters={[6, 7]} techniques={['Multiple Currency Facts', 'Multiple Units of Measure Facts']} />
+
+## Multiple currencies
+
+Cascade's web store sells in USD, CAD and EUR. Analysts want:
+
+- **local** amounts (what the Canadian customer actually paid), for regional teams and reconciliation;
+- **standard** amounts in one reporting currency (USD), for anything that sums across currencies.
+
+Kimball's recommendation: store **both** on the fact row, plus a **currency dimension** identifying the local
+currency.
+
+<DbtFile path="models/marts/orders/fct_order_lines.sql" lines={[27, 52]} />
+
+Design points:
+
+- **Convert at the transaction-date rate** and store the result, so history doesn't shift when rates change.
+- Never sum the `*_local` columns across currencies: filter or group by `local_currency_key` first.
+- If finance needs other conversion bases (month-end rate, budget rate), add a **separate fact column per
+  basis**, or a currency-conversion fact table keyed by date and currency pair for on-the-fly conversion into
+  any currency.
+
+```sql
+-- Revenue by local currency, and the USD equivalent
+select c.currency_code,
+       sum(f.net_order_amount_local) as net_local,
+       sum(f.net_order_amount_usd)   as net_usd
+from fct_order_lines f
+join dim_currency c on c.currency_key = f.local_currency_key
+group by 1;
+```
+
+## Multiple units of measure
+
+A product might be ordered in cases, shipped in pallets and sold in eaches. Different teams want quantities in
+different units.
+
+Kimball's guidance: store quantities in **one standard unit** on the fact (or a small set of "conformed" units),
+and put the **conversion factors** on the product dimension (or on the fact, if they vary by transaction):
+
+```sql
+-- fact stores quantity_each; dim_product stores each_per_case, each_per_pallet
+select p.sku,
+       sum(f.quantity_each)                    as eaches,
+       sum(f.quantity_each) / p.each_per_case  as cases
+from fct_shipments f
+join dim_product p on p.product_key = f.product_key
+group by p.sku, p.each_per_case;
+```
+
+Don't store five quantity columns in five units; that's five chances to be inconsistent.
+
+<Quiz questions={[
+  {question: 'Why store both local and USD amounts instead of converting at query time?', options: ['Snowflake cannot multiply', 'Conversion at the transaction-date rate is fixed into history, and every query gets the same answer without a rate join', 'It saves storage', 'Local amounts are non-additive'], answer: 1, explanation: 'Pre-converted standard-currency facts are consistent and simple to use; local amounts serve reconciliation.'},
+]} />

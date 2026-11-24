@@ -1,0 +1,144 @@
+---
+title: "Type 2: add new row"
+sidebar_label: "Type 2: add new row"
+description: Full history with versioned rows, effective/expiration timestamps, current flags, and point-in-time fact joins, built from a change log.
+sidebar_position: 2
+---
+
+# Type 2: add new row
+
+<KimballRef chapters={[5, 9]} techniques={['Type 2: Add New Row']}>
+Ch. 5 teaches Type 2 mechanics; the HR chapter (Ch. 9) adds precise effective timestamps and a "row change
+reason" attribute for employee profiles.
+</KimballRef>
+
+**Type 2** is the workhorse SCD. When a tracked attribute changes:
+
+1. the current row is **expired** (its `valid_to` is set to the change time);
+2. a **new row** is inserted with a **new surrogate key**, the new values, and `valid_from` = the change time.
+
+Facts already loaded keep pointing at the old version, and new facts point at the new one. Reports naturally show
+history **as it was**.
+
+## What it looks like
+
+Wool Hiking Socks (SKU-2004) in the lab's `dim_product`:
+
+| product_key | sku | category | valid_from | valid_to | is_current |
+|---|---|---|---|---|---|
+| `a91c…` | SKU-2004 | Footwear | 1900-01-01 00:00 | 2025-03-01 09:00 | false |
+| `3e07…` | SKU-2004 | Socks & Accessories | 2025-03-01 09:00 | 9999-12-31 23:59:59 | true |
+
+And Fuel Canister (SKU-1006), which changed category in February and package size in May, has **three** versions.
+
+### Row administration columns
+
+| Column | Purpose | Convention in the lab |
+|---|---|---|
+| `product_key` | Surrogate key of the version | hash of (natural key, `valid_from`) |
+| `product_durable_key` | Same for all versions | hash of natural key |
+| `valid_from` | When this version became effective | first version: `1900-01-01` |
+| `valid_to` | When it stopped being effective | current: `9999-12-31 23:59:59`, never null |
+| `is_current` | Convenience filter | true on exactly one row per natural key |
+| `version_number` | 1, 2, 3… | handy for debugging and Type 0 lookups |
+| `row_change_reason` | *Why* the version exists (Kimball's HR chapter) | on `dim_employee`: HIRE, PROMOTION, TRANSFER… |
+
+Using a far-future date instead of `null` for the current row means a single `BETWEEN`-style predicate works for
+every row, with no `or valid_to is null`.
+
+## Building Type 2 from a change log
+
+Many sources publish **what changed and when**: CDC streams, audit tables, ERP change documents. The lab's
+`raw_product_changes` is one. From it you can reconstruct **complete** history, including changes from before
+the warehouse existed, and rebuild it identically on every run.
+
+<DbtFile path="models/intermediate/int_product_versions.sql" />
+
+The steps:
+
+1. **Version starts**: the beginning of time, plus every distinct timestamp at which a tracked attribute changed.
+2. **Attribute intervals**: when each value of each attribute was in force. The first change's `old_value`
+   held from the beginning.
+3. **As-of lookup**: for each version start, the latest interval starting at or before it (`QUALIFY row_number() = 1`).
+4. **Pivot** back to one row per version, filling never-changed attributes from the current row.
+5. **Close versions** with `lead(valid_from)`.
+
+Then `dim_product` adds the keys and Type 1 columns. For customers, the same logic is reused through the
+`scd2_from_change_log` macro:
+
+<DbtFile path="models/intermediate/int_customer_versions.sql" />
+
+The other way to get Type 2 in dbt, **snapshots**, is compared in
+[dbt snapshots vs change logs](./snapshots-vs-change-logs).
+
+## Point-in-time fact joins
+
+The fact load must pick the version in force **when the event happened**:
+
+```sql
+left join {{ ref('dim_product') }} as p
+    on  p.sku = s.sku
+    and s.transaction_ts >= p.valid_from
+    and s.transaction_ts <  p.valid_to
+```
+
+Two rules:
+
+- **Half-open intervals** (`>=` from, `<` to), with each version's `valid_to` equal to the next version's
+  `valid_from`. Every instant then matches exactly one version.
+- **Join on the event timestamp**, not the load time. A late-arriving March sale must get the March version.
+
+## Testing Type 2 integrity
+
+A broken Type 2 dimension (overlaps, gaps, two current rows) silently corrupts every fact that joins to it.
+The lab's generic test checks all three:
+
+<DbtFile path="tests/generic/scd2_valid_ranges.sql" />
+
+Applied in YAML:
+
+```yaml
+- name: dim_product
+  data_tests:
+    - scd2_valid_ranges:
+        arguments:
+          natural_key: sku
+```
+
+## Querying Type 2
+
+```sql
+-- "As was": sales by the category in force at the time of sale
+select p.category, sum(f.extended_net_sales_amount) as net_sales
+from fct_retail_sales f
+join dim_product p on p.product_key = f.product_key
+where p.sku = 'SKU-2004'
+group by 1;
+-- Footwear              17,034.00
+-- Socks & Accessories   42,202.80
+
+-- Dimension "as of" a date, e.g. the product catalog on 2025-02-01
+select * from dim_product
+where '2025-02-01'::timestamp_ntz >= valid_from
+  and '2025-02-01'::timestamp_ntz <  valid_to;
+
+-- Count of products, not versions: use the durable or natural key
+select count(distinct product_durable_key) from dim_product where sku <> 'N/A';
+```
+
+## Pitfalls
+
+- **Counting rows as entities.** `count(*)` on a Type 2 dimension counts versions.
+- **Joining facts on the natural key.** Fan-out (see [grain](/foundations/declaring-the-grain)).
+- **Tracking everything as Type 2.** Every trivial change creates a version; dimensions balloon. Track Type 2 on
+  attributes people actually analyze by; correct the rest as Type 1.
+- **Rapidly changing attributes as Type 2.** Age, income and score change constantly; use a
+  [mini-dimension](./type-4-mini-dimensions).
+- **Same-instant multiple changes.** Two attributes changing at the same timestamp must produce **one** version.
+  The `union` in "version starts" de-duplicates them.
+
+<Quiz questions={[
+  {question: 'Why does the lab store 9999-12-31 instead of NULL in valid_to for current rows?', options: ['Snowflake cannot store null timestamps', 'So one range predicate works for every row without "or valid_to is null"', 'For partitioning', 'It is required by dbt'], answer: 1, explanation: 'A real far-future date keeps point-in-time joins and filters simple and index- and prune-friendly.'},
+  {question: 'A March sale arrives late, in June. Which product version should it join to?', options: ['The current version', 'The version in force in March, using the sale timestamp', 'The first version', 'Unknown'], answer: 1, explanation: 'Point-in-time joins use the event timestamp so late facts land on the correct historical version.'},
+  {question: 'How many rows does SKU-1006 have in dim_product, given a category change in February and a package-size change in May?', options: ['1', '2', '3', '4'], answer: 2, explanation: 'Original version, then a new version at each of the two change timestamps: three rows.'},
+]} />

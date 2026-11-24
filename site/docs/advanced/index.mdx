@@ -1,0 +1,26 @@
+---
+title: "Module 4: Advanced patterns"
+sidebar_label: Overview
+description: Bridge tables, ragged hierarchies, late-arriving data, allocation, multiple currencies, aggregates, consolidated facts, audit dimensions and heterogeneous products.
+sidebar_position: 0
+---
+
+# Module 4: Advanced patterns
+
+The basic techniques cover most of a warehouse. These cover the rest: the places where the business isn't
+shaped like a simple star.
+
+| Lesson | Kimball technique(s) | Lab model |
+|---|---|---|
+| [Multivalued dimensions and bridge tables](/advanced/multivalued-dimensions-and-bridges) | Multivalued Dimensions and Bridge Tables; Time Varying Multivalued Bridge Tables | `bridge_customer_interest` |
+| [Ragged and recursive hierarchies](/advanced/ragged-and-recursive-hierarchies) | Fixed Depth Positional Hierarchies; Slightly Ragged/Variable Depth Hierarchies; Ragged/Variable Depth Hierarchies with Hierarchy Bridge Tables; with Pathstring Attributes | `dim_account`, `bridge_account_hierarchy`, `bridge_employee_reporting` |
+| [Late-arriving data](/advanced/late-arriving-data) | Late Arriving Facts; Late Arriving Dimensions | `fct_retail_sales`, `dim_employee` |
+| [Header/line facts and allocation](/advanced/header-line-and-allocation) | Header/Line Fact Tables; Allocated Facts; Profit and Loss Fact Tables Using Allocations | `int_order_lines_allocated` |
+| [Multiple currencies and units of measure](/advanced/multiple-currencies-and-units) | Multiple Currency Facts; Multiple Units of Measure Facts | `fct_order_lines` |
+| [Aggregates and shrunken dimensions](/advanced/aggregates-and-shrunken-dimensions) | Aggregate Fact Tables or OLAP Cubes; Shrunken Dimensions | `agg_sales_monthly_category_store` |
+| [Consolidated fact tables](/advanced/consolidated-fact-tables) | Consolidated Fact Tables; Multipass SQL to Avoid Fact-to-Fact Table Joins | `fct_budget_vs_actual` |
+| [Audit dimensions and error events](/advanced/audit-dimension-and-error-events) | Audit Dimensions; Error Event Schemas | `dim_audit` |
+| [Heterogeneous products (supertype/subtype)](/advanced/supertype-subtype) | Supertype and Subtype Schemas for Heterogeneous Products | design |
+| [More advanced techniques](/advanced/more-techniques) | Step dimensions, behavior tags, timespan tracking, measure type dimensions, and more | design |
+
+<KimballRef chapters={[2, 6, 7, 8, 10]} />

@@ -1,0 +1,220 @@
+---
+title: SQL drills
+description: Business questions to answer against the lab's star schemas in Snowflake, with solutions.
+sidebar_position: 3
+---
+
+# SQL drills
+
+Run these against your built lab (`<your_schema>_MARTS`). Each drill names the technique it exercises.
+
+---
+
+**1. Top 5 products by gross profit in the Mountain region, Q2 2025.** *(star join basics)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+select p.product_name, sum(f.extended_gross_profit_amount) as gross_profit
+from fct_retail_sales f
+join dim_product p on p.product_key = f.product_key
+join dim_store s   on s.store_key = f.store_key
+join dim_date d    on d.date_key = f.date_key
+where s.store_region = 'Mountain' and d.calendar_year_quarter = '2025-Q2'
+group by 1
+order by 2 desc
+limit 5;
+```
+</details>
+
+---
+
+**2. Weekend share of net sales by store.** *(date dimension indicators)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+select s.store_name,
+       sum(iff(d.weekday_indicator = 'Weekend', f.extended_net_sales_amount, 0))
+         / sum(f.extended_net_sales_amount) as weekend_share
+from fct_retail_sales f
+join dim_store s on s.store_key = f.store_key
+join dim_date d  on d.date_key = f.date_key
+group by 1
+order by 2 desc;
+```
+</details>
+
+---
+
+**3. Month-end units on hand by department, January to June.** *(semi-additive facts)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+select d.year_month, p.department, sum(f.quantity_on_hand) as month_end_units
+from fct_inventory_daily_snapshot f
+join dim_date d    on d.date_key = f.date_key
+join dim_product p on p.product_key = f.product_key
+where d.month_end_indicator = 'Month End'
+group by all
+order by 1, 2;
+```
+</details>
+
+---
+
+**4. For each promotion, how many product-store-days were covered, and on how many did at least one promoted sale happen?** *(factless coverage)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+with covered as (
+    select promotion_key, date_key, product_key, store_key from fct_promotion_coverage
+),
+sold as (
+    select distinct promotion_key, date_key, product_key, store_key from fct_retail_sales
+)
+select pr.promo_name,
+       count(*)                                            as covered_days,
+       count(s.promotion_key)                              as days_with_promoted_sale,
+       round(count(s.promotion_key) / count(*), 3)         as hit_rate
+from covered c
+left join sold s
+  on s.promotion_key = c.promotion_key and s.date_key = c.date_key
+ and s.product_key = c.product_key and s.store_key = c.store_key
+join dim_promotion pr on pr.promotion_key = c.promotion_key
+group by 1
+order by hit_rate;
+```
+</details>
+
+---
+
+**5. Net sales of SKU-1006 (Fuel Canister) by package size at the time of sale.** *(Type 2 "as was")*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+select p.package_size, min(f.transaction_date) as first_sale, max(f.transaction_date) as last_sale,
+       sum(f.extended_net_sales_amount) as net_sales
+from fct_retail_sales f
+join dim_product p on p.product_key = f.product_key
+where p.sku = 'SKU-1006'
+group by 1;
+```
+
+The two package sizes split at 2025-05-20, the date of the change.
+</details>
+
+---
+
+**6. All-channel (store + web) units by category and month.** *(drill-across, conformed dimensions)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+with store as (
+    select d.year_month, cur.current_category as category, sum(f.sales_quantity) as store_units
+    from fct_retail_sales f
+    join dim_date d on d.date_key = f.date_key
+    join scd_type7_product_current cur on cur.product_durable_key = f.product_durable_key
+    group by all
+),
+web as (
+    select d.year_month, cur.current_category as category, sum(f.order_quantity) as web_units
+    from fct_order_lines f
+    join dim_date d    on d.date_key = f.order_date_key
+    join dim_product p on p.product_key = f.product_key
+    join scd_type7_product_current cur on cur.product_durable_key = p.product_durable_key
+    group by all
+)
+select coalesce(s.year_month, w.year_month) as year_month,
+       coalesce(s.category, w.category)     as category,
+       coalesce(store_units, 0) as store_units, coalesce(web_units, 0) as web_units
+from store s full outer join web w
+  on w.year_month = s.year_month and w.category = s.category
+order by 1, 2;
+```
+
+Note the web fact doesn't carry the durable key, so it goes through `dim_product` to reach it. That's an argument
+for adding `product_durable_key` to every fact.
+</details>
+
+---
+
+**7. Average days from PO issue to payment, by vendor country.** *(accumulating snapshot)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+select v.vendor_country, avg(f.issued_to_paid_lag_days) as avg_days_issue_to_pay, sum(f.paid_count) as lines_paid
+from fct_po_line_pipeline f
+join dim_vendor v on v.vendor_key = f.vendor_key
+group by 1;
+```
+</details>
+
+---
+
+**8. Total actual vs budget for everything under "Revenue", by month.** *(hierarchy bridge + consolidated fact)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+select d.year_month, sum(f.actual_amount) as actual, sum(f.budget_amount) as budget
+from fct_budget_vs_actual f
+join bridge_account_hierarchy b on b.descendant_account_key = f.account_key
+join dim_account anc            on anc.account_key = b.ancestor_account_key
+join dim_date d                 on d.date_key = f.month_end_date_key
+where anc.account_name = 'Revenue'
+group by 1
+order by 1;
+```
+
+(Actuals are debit-positive, so revenue actuals are negative while budgets are positive. A reporting-sign
+attribute would fix the presentation; see the [accounting case study](/case-studies/accounting).)
+</details>
+
+---
+
+**9. Weighted net sales by interest group (Trail / Vertical / Water & Snow).** *(multivalued bridge)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+select i.interest_group, sum(f.extended_net_sales_amount * b.weighting_factor) as weighted_net_sales
+from fct_retail_sales f
+join dim_customer c             on c.customer_key = f.customer_key
+join bridge_customer_interest b on b.customer_durable_key = c.customer_durable_key
+join dim_interest i             on i.interest_key = b.interest_key
+group by 1
+order by 2 desc;
+```
+</details>
+
+---
+
+**10. Which inferred (late-arriving) employees have HR events, and when were they hired?** *(late-arriving dimensions)*
+
+<details>
+<summary>Solution</summary>
+
+```sql
+select e.employee_id, e.employee_name, d.full_date as event_date, f.event_type
+from fct_employee_events f
+join dim_employee e on e.employee_key = f.employee_key
+join dim_date d     on d.date_key = f.event_date_key
+where e.is_inferred_member
+order by 3;
+```
+</details>

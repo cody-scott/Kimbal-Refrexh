@@ -1,0 +1,79 @@
+---
+title: The dbt Semantic Layer on a star
+description: Declaring Kimball facts and dimensions as semantic models, entities, measures and metrics so every tool computes the same numbers.
+sidebar_position: 6
+---
+
+# The dbt Semantic Layer on a star
+
+<KimballRef chapters={[1, 2]} techniques={['Conformed Facts', 'Additive, Semi-Additive, Non-Additive Facts']}>
+Kimball's goal of one consistent set of business definitions, delivered to every query tool, is what
+a semantic layer automates.
+</KimballRef>
+
+A star schema already encodes much of the semantics: grain, joins, additivity. The dbt Semantic Layer
+(MetricFlow) makes those semantics **machine-readable**, so BI tools, notebooks and LLM agents all ask for
+`net_sales by product__category` and get the same SQL.
+
+## The mapping
+
+| Kimball concept | Semantic Layer concept |
+|---|---|
+| Fact table | Semantic model with **measures** |
+| Fact grain | The semantic model's **primary entity** |
+| Dimension table | Semantic model with **dimensions** and a primary entity |
+| Fact FK → dimension PK | **Foreign entity** on the fact = **primary entity** on the dimension |
+| Additive fact | Measure with `agg: sum` |
+| Semi-additive fact | Measure with `non_additive_dimension` (e.g. take the last value over the date) |
+| Non-additive ratio | **Ratio metric** (numerator / denominator from additive measures) |
+| Distinct counts | Measure with `agg: count_distinct` |
+| Conformed dimension | One semantic model reused by many fact semantic models |
+| Role-playing date | Multiple time dimensions / entities |
+
+## The lab's semantic models
+
+<DbtFile path="models/semantic/sem_retail_sales.yml" />
+
+The semantic layer needs a **time spine** with no special rows, so the lab keeps a separate model rather than
+reusing `dim_date` (whose `-1` / `-2` rows have null dates):
+
+<DbtFile path="models/marts/core/metricflow_time_spine.sql" />
+
+## Semi-additive measures
+
+The inventory snapshot's `quantity_on_hand` must not be summed over time. Declare it:
+
+```yaml
+semantic_models:
+  - name: inventory_daily
+    model: ref('fct_inventory_daily_snapshot')
+    defaults: {agg_time_dimension: snapshot_date}
+    entities:
+      - {name: product, type: foreign, expr: product_key}
+      - {name: store, type: foreign, expr: store_key}
+    dimensions:
+      - {name: snapshot_date, type: time, type_params: {time_granularity: day}}
+    measures:
+      - name: units_on_hand
+        agg: sum
+        expr: quantity_on_hand
+        non_additive_dimension:
+          name: snapshot_date
+          window_choice: max    # period-end balance: last day in the period
+```
+
+Querying `units_on_hand` by month then returns the **month-end** balance, summed across products and stores.
+MetricFlow enforces the semi-additive rule for every consumer.
+
+## Querying
+
+```bash
+dbt sl query --metrics net_sales,gross_margin_pct --group-by metric_time__month,product__category
+# or with MetricFlow locally:
+mf query --metrics net_sales --group-by metric_time__month,store__store_region
+```
+
+<Quiz questions={[
+  {question: 'How should gross margin % be defined in the semantic layer?', options: ['A measure with agg: avg', 'A ratio metric of gross_profit over net_sales', 'A derived column in the fact table', 'A dimension'], answer: 1, explanation: 'Ratio metrics compute the ratio after aggregating the additive components, at any grain.'},
+  {question: 'Why does the lab use a separate metricflow_time_spine instead of dim_date?', options: ['dim_date is too small', 'The time spine must contain only real dates; dim_date has special -1/-2 rows with null dates', 'MetricFlow cannot read tables', 'For performance'], answer: 1, explanation: 'Special members are right for facts but wrong for a time spine.'},
+]} />

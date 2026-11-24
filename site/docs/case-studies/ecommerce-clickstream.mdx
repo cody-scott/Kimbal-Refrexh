@@ -1,0 +1,94 @@
+---
+title: "Case study: E-commerce clickstream (design)"
+sidebar_label: E-commerce clickstream
+description: Page-event and session grains, page and session dimensions, step dimensions and a profitability fact.
+sidebar_position: 12
+---
+
+# Case study: E-commerce clickstream (design)
+
+<KimballRef chapters={[15]} techniques={['Step Dimensions', 'Transaction Fact Tables', 'Aggregate Fact Tables or OLAP Cubes', 'Profit and Loss Fact Tables Using Allocations']} />
+
+*Not built in the lab. It extends Cascade Outfitters' web store as a design exercise.*
+
+## The business
+
+Cascade's digital team wants to understand browsing behavior: traffic sources, paths through the site,
+where people abandon, and which sessions convert.
+
+## Two grains
+
+| Fact | Grain | Facts |
+|---|---|---|
+| `fct_page_events` | one row per page event (view, add-to-cart, search) | dwell seconds, event count |
+| `fct_sessions` | one row per session | page count, session seconds, cart adds, orders, revenue |
+
+The session fact is an **aggregate with its own meaning**: it's what most questions are about, and building it
+once avoids every analyst re-sessionizing events.
+
+## Dimensions
+
+- **Date and time of day** (UTC and visitor local).
+- **Page:** page type (product, category, search, cart, checkout), template, content group, product (if a product
+  page). A conformed link to `dim_product`!
+- **Event type:** view, click, add-to-cart, remove, search, checkout step.
+- **Session dimension** (on page events) or session attributes (on the session fact): entry page, landing
+  channel, device type, browser, new vs returning, a bot flag.
+- **Referral / traffic source:** channel, source, medium, campaign (UTM).
+- **Customer:** for identified visitors only; `-2` "Anonymous Visitor" otherwise.
+- **Step dimension:** position of the page within the session.
+
+### The step dimension
+
+```sql
+-- dim_step: one row per (step_number, total_steps) combination
+select
+    {{ dbt_utils.generate_surrogate_key(['step_number', 'total_steps']) }} as step_key,
+    step_number,
+    total_steps,
+    step_number = 1           as is_first_step,
+    step_number = total_steps as is_last_step,
+    total_steps - step_number as steps_remaining
+from (
+    select s.seq as step_number, t.seq as total_steps
+    from (select row_number() over (order by seq4()) as seq from table(generator(rowcount => 100))) s
+    join (select row_number() over (order by seq4()) as seq from table(generator(rowcount => 100))) t
+      on s.seq <= t.seq
+)
+```
+
+Each page event then carries a `step_key`, making "exit pages" (`is_last_step`) and "landing pages"
+(`is_first_step`) trivial filters.
+
+## Sessionization in dbt (Snowflake)
+
+```sql
+-- int_page_events_sessionized.sql: new session after 30 minutes of inactivity
+with ordered as (
+    select *,
+           iff(datediff(minute, lag(event_ts) over (partition by visitor_id order by event_ts), event_ts) > 30
+               or lag(event_ts) over (partition by visitor_id order by event_ts) is null, 1, 0) as is_new_session
+    from {{ ref('stg_web__events') }}
+)
+select *,
+       visitor_id || '-' || sum(is_new_session) over (partition by visitor_id order by event_ts
+                                                      rows between unbounded preceding and current row) as session_id
+from ordered
+```
+
+## Profitability
+
+Kimball's e-commerce chapter ends with a **profit-and-loss fact** at the order-line grain: revenue less product
+cost, allocated shipping and fulfillment cost, payment fees and allocated marketing (acquisition) cost. Each
+component is its own fact column. The lab's `fct_order_lines` already has revenue, cost and allocated shipping;
+the rest are allocation exercises.
+
+## Exercise
+
+<details>
+<summary>Find the most common <strong>exit page type</strong> for sessions that added to cart but didn't order.</summary>
+
+From `fct_page_events` join `dim_step` (filter `is_last_step`), `dim_page` and the session attributes (filter
+`cart_adds > 0 and orders = 0`); group by page type. The step dimension removes the need for a window function
+over every event at query time.
+</details>

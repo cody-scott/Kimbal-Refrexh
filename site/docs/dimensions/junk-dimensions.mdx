@@ -1,0 +1,65 @@
+---
+title: Junk dimensions
+description: Combining low-cardinality flags and indicators into one dimension instead of cluttering the fact table.
+sidebar_position: 6
+---
+
+# Junk dimensions
+
+<KimballRef chapters={[6]} techniques={['Junk Dimensions']}>
+Order Management (Ch. 6) introduces junk dimensions for miscellaneous order flags.
+</KimballRef>
+
+Transactions come with a handful of **low-cardinality flags and codes** that don't belong to any existing
+dimension: payment method, shipping method, gift flag, rush flag, order channel. Your options:
+
+| Option | Problem |
+|---|---|
+| Leave them as text columns on the fact | Bloats the largest table; inconsistent values; no place for descriptions |
+| One tiny dimension each | A [centipede](/facts/keys-nulls-and-hygiene#centipede-fact-tables) of foreign keys |
+| Drop them | Users lose useful filters |
+| **Combine them into one junk dimension** | ✓ One small key, one small table, all combinations described |
+
+"Junk" is Kimball's tongue-in-cheek name; in practice teams call these `*_profile` or `*_indicator` dimensions.
+
+## The lab's order profile
+
+<DbtFile path="models/marts/orders/dim_order_profile.sql" />
+
+The fact table looks up the combination and stores one key:
+
+```sql
+left join {{ ref('dim_order_profile') }} as op
+    on  op.payment_method = o.payment_method
+    and op.ship_method    = o.ship_method
+    and op.is_gift        = o.is_gift
+...
+{{ dim_key('op.order_profile_key') }} as order_profile_key
+```
+
+## Cartesian vs observed combinations
+
+| Build approach | When |
+|---|---|
+| **Cartesian product** of all allowed values (as in the lab: 3 × 3 × 2 = 18 rows) | Small value domains; every key exists before any data arrives |
+| **Observed combinations** (`select distinct ... from source`) | Many flags or high-cardinality codes where the full product would be millions of rows |
+
+With observed combinations, hash the attribute values for the key. A combination that first appears tomorrow
+gets its key deterministically, and existing keys never change.
+
+## Querying
+
+```sql
+-- Does shipping speed affect order size? And gifting?
+select op.ship_speed_band, op.gift_indicator,
+       count(distinct f.order_number)                         as orders,
+       sum(f.net_order_amount_usd) / count(distinct f.order_number) as avg_order_value_usd
+from fct_order_lines f
+join dim_order_profile op on op.order_profile_key = f.order_profile_key
+group by all;
+```
+
+<Quiz questions={[
+  {question: 'Which attributes are good candidates for a junk dimension?', options: ['Customer name and address', 'Payment method, ship method, gift flag', 'Order date and ship date', 'Product category'], answer: 1, explanation: 'Junk dimensions collect low-cardinality flags that do not belong to any other dimension. Names, dates and categories have proper homes.'},
+  {question: 'Five flags each have 2 to 4 values, giving 300 combinations in theory, of which 40 actually occur. What is a reasonable build?', options: ['Five separate dimensions', 'Cartesian product of 300 rows, or 40 observed rows; both are fine at this size', 'Put the flags on the fact table', 'One dimension per combination'], answer: 1, explanation: 'At a few hundred rows either approach is fine. Observed combinations matter when the Cartesian product would be huge.'},
+]} />

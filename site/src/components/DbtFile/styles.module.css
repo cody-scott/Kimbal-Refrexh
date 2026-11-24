@@ -1,0 +1,14 @@
+.wrap {
+  margin-bottom: 1.5rem;
+}
+.wrap :global(.theme-code-block) {
+  margin-bottom: 0.25rem;
+}
+.source {
+  font-size: 0.78rem;
+  color: var(--ifm-color-emphasis-700);
+  text-align: right;
+}
+.details {
+  margin-bottom: 1.5rem;
+}

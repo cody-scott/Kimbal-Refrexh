@@ -1,0 +1,96 @@
+---
+title: Surrogate, natural and durable keys
+description: Why dimensions get warehouse-assigned keys, and how to generate them in dbt (hashes vs sequences) on Snowflake.
+sidebar_position: 1
+---
+
+# Surrogate, natural and durable keys
+
+<KimballRef chapters={[3, 19]} techniques={['Dimension Surrogate Keys', 'Natural, Durable, and Supernatural Keys']}>
+Ch. 3 makes the case for surrogate keys; Ch. 19 covers the "surrogate key generator" and "surrogate key
+pipeline" ETL subsystems.
+</KimballRef>
+
+## Three kinds of key
+
+| | Natural key | Surrogate key | Durable (supernatural) key |
+|---|---|---|---|
+| Assigned by | Source system | The warehouse | The warehouse |
+| Identifies | The entity in that source | **One row** of the dimension (one version) | The entity, across all versions and sources |
+| Changes? | Can be reused, reformatted, merged | Never | Never |
+| Lab example | `sku = 'SKU-1006'` | `product_key` (3 values for SKU-1006) | `product_durable_key` (1 value) |
+
+## Why not just use the natural key?
+
+Kimball's reasons, which still hold in dbt and Snowflake:
+
+1. **History.** A Type 2 dimension has several rows per natural key. The fact must reference a specific *version*,
+   which needs a key per version.
+2. **Insulation from the source.** Sources reuse codes, change formats ("SKU-1006" becomes "1006-A") or get
+   replaced in a migration. Surrogate keys keep facts stable.
+3. **Integration.** The same customer appears as `C0042` in the loyalty system and `98123` in e-commerce. A durable
+   key ties them together.
+4. **Special members.** "Unknown" and "Not applicable" need keys too, which no source provides.
+5. **Joins.** One narrow key column per dimension keeps fact tables small and joins simple.
+
+## Generating keys in dbt
+
+Traditional ETL uses **integer sequences**, assigned on insert. dbt models are usually *rebuilt*, so a sequence
+would hand the same row a different number each run, breaking every fact. The standard dbt answer is a
+**deterministic hash** of the columns that identify the row:
+
+```sql
+{{ dbt_utils.generate_surrogate_key(['sku', 'valid_from']) }} as product_key,   -- one per version
+{{ dbt_utils.generate_surrogate_key(['sku']) }}               as product_durable_key
+```
+
+This compiles on Snowflake to roughly:
+
+```sql
+md5(cast(coalesce(cast(sku as varchar), '_dbt_utils_surrogate_key_null_') || '-' ||
+         coalesce(cast(valid_from as varchar), '_dbt_utils_surrogate_key_null_') as varchar))
+```
+
+| | Hash keys (dbt default) | Integer sequences (classic Kimball) |
+|---|---|---|
+| Deterministic across rebuilds | Yes | No (unless you persist a key map) |
+| Facts can compute keys without a lookup | Yes, if they know the natural key and version | No, a lookup is required |
+| Size | 32-character string | 4 to 8 bytes |
+| Join speed | Slightly slower in theory; rarely matters in Snowflake | Fastest |
+| Meaning leakage | None, though in theory it can be reversed for tiny domains | None |
+
+:::note Integer keys in dbt
+If you need integers (a downstream tool requires them, or the tables are huge), keep a **key map** table that
+is `incremental` and only ever inserts new natural keys. Assign `max(key) + row_number()` to new keys and never
+reassign old ones. That's Kimball's surrogate key generator, implemented in dbt.
+:::
+
+## The surrogate key pipeline
+
+When loading facts, each natural key is swapped for the correct surrogate key, Kimball's "surrogate key
+pipeline". For Type 2 dimensions that means a **point-in-time lookup**:
+
+```sql
+left join {{ ref('dim_product') }} as p
+    on  p.sku = s.sku
+    and s.transaction_ts >= p.valid_from
+    and s.transaction_ts <  p.valid_to
+```
+
+followed by `coalesce(p.product_key, '-1')` for misses. Note the **half-open interval** (`>=` from, `<` to):
+with `valid_to` equal to the next version's `valid_from`, every instant belongs to exactly one version.
+
+## The date dimension exception
+
+Kimball permits a **meaningful integer key for dates**: `20250301`. Dates never change meaning, the key sorts
+correctly, and Snowflake can prune on it. The lab's `date_key()` macro builds it arithmetically:
+
+```sql
+(year(d) * 10000 + month(d) * 100 + day(d))
+```
+
+<Quiz questions={[
+  {question: 'Why can\'t a Type 2 product dimension use sku as its primary key?', options: ['SKUs are strings', 'There can be several rows (versions) per SKU', 'SKUs are confidential', 'dbt requires hashes'], answer: 1, explanation: 'Each version needs its own key so facts can reference the version in force at the time of the event.'},
+  {question: 'What is the main reason dbt projects use hashed surrogate keys instead of sequences?', options: ['Hashes are smaller', 'Models are rebuilt, and hashes give the same key for the same row on every run', 'Snowflake has no sequences', 'Hashes sort by date'], answer: 1, explanation: 'Determinism across rebuilds is the key property. Sequences assigned at build time would change on every full refresh.'},
+  {question: 'What is the durable key for?', options: ['Joining facts to the version in force at the time', 'Identifying an entity across all its versions, e.g. for "as is" reporting', 'Partitioning', 'Encrypting the natural key'], answer: 1, explanation: 'The durable key is the same for every version of an entity, which supports current-value reporting (Type 7) and integration across sources.'},
+]} />

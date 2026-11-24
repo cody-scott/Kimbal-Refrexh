@@ -1,0 +1,88 @@
+---
+title: Attributes, hierarchies and flags
+description: Designing wide, verbose, denormalized dimensions with flattened hierarchies and textual indicators.
+sidebar_position: 3
+---
+
+# Attributes, hierarchies and flags
+
+<KimballRef chapters={[3, 8]} techniques={['Denormalized Flattened Dimensions', 'Multiple Hierarchies in Dimensions', 'Flags and Indicators as Textual Attributes', 'Null Attributes in Dimensions', 'Drilling Down']} />
+
+## Make dimensions wide and verbose
+
+Dimension attributes are the vocabulary of the business: every one is a potential filter, grouping or report
+label. Good dimensions:
+
+- have **lots of attributes**. Kimball's retail product dimension runs to dozens of columns;
+- use **full, readable values**: `'Weekend'`, not `'Y'`; `'Backpacking Tents'`, not `'BT'`;
+- include **useful derived attributes**: price bands, size bands, tenure bands, decoded statuses;
+- contain **no numeric codes users must decode**. If you keep the code, add its description beside it.
+
+## Flatten hierarchies into the row
+
+A product sits in a subcategory, in a category, in a department. In 3NF these are four tables. In a
+dimensional model they are **columns on the product row**:
+
+<DbtFile path="models/marts/core/dim_product.sql" lines={[22, 54]} />
+
+Drilling down from department to category to subcategory to product is then just adding columns to the
+`GROUP BY`. In Kimball's sense, "drilling down" is simply adding a row header from a dimension.
+
+### Multiple hierarchies
+
+A dimension can hold several independent hierarchies. Stores roll up geographically
+(store → district → region) and might also roll up by format (flagship / standard / outlet) or by size band. All of
+them live side by side on `dim_store`. No separate tables are needed, and users can mix them freely.
+
+### Fixed vs ragged hierarchies
+
+Flattening works when every member has the **same number of levels** (a fixed-depth hierarchy). When depth
+varies (an org chart or a chart of accounts), you need the techniques in
+[Ragged and recursive hierarchies](/advanced/ragged-and-recursive-hierarchies).
+
+## Flags and indicators as text
+
+```sql
+-- Bad: what does TRUE mean on a report? What's the column header?
+is_weekend boolean
+
+-- Good: self-describing on any report, filterable by value
+iff(dayofweekiso(d) in (6, 7), 'Weekend', 'Weekday') as weekday_indicator
+```
+
+Booleans are fine as *additional* technical columns (`is_current` is useful in SQL), but a user-facing
+attribute should be readable on its own.
+
+## Null attributes
+
+Kimball recommends replacing nulls in dimension attributes with descriptive values, `'Unknown'`, `'Not Applicable'`
+or `'None'`, because:
+
+- `GROUP BY` puts nulls in an unlabeled group;
+- `WHERE attr <> 'X'` silently drops nulls, which surprises everyone.
+
+```sql
+coalesce(h.holiday_name, 'None') as holiday_name
+case when square_footage is null then 'Not Applicable' ... end as store_size_band
+```
+
+Dates and true numerics are the exception: `null` is the honest value for an unknown date of birth.
+
+## Querying: drilling down
+
+```sql
+-- Level 1: department
+select p.department, sum(f.extended_net_sales_amount) as net_sales
+from fct_retail_sales f join dim_product p on p.product_key = f.product_key
+group by all;
+
+-- Drill down: add category (and so on to product)
+select p.department, p.category, sum(f.extended_net_sales_amount) as net_sales
+from fct_retail_sales f join dim_product p on p.product_key = f.product_key
+group by all;
+```
+
+<Quiz questions={[
+  {question: 'In Kimball terms, what does "drilling down" mean?', options: ['Joining to a more detailed fact table', 'Adding a more detailed attribute (row header) from a dimension to the query', 'Querying the source system', 'Using a recursive CTE'], answer: 1, explanation: 'Drilling down is simply adding a dimension attribute to the grouping, which works naturally with flattened hierarchies.'},
+  {question: 'Which is the better user-facing attribute?', options: ['is_holiday = TRUE', 'holiday_indicator = \'Holiday\'', 'hol_flg = 1', 'All are equivalent'], answer: 1, explanation: 'Textual indicators are self-describing on reports and filters.'},
+]} />

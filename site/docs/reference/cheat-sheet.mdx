@@ -1,0 +1,101 @@
+---
+title: Cheat sheet
+description: One-page summary of Kimball dimensional modeling rules, patterns and dbt idioms.
+sidebar_position: 3
+hide_progress: true
+---
+
+# Cheat sheet
+
+## Ten rules of thumb
+
+Paraphrasing the essential rules the Kimball Group has published over the years:
+
+1. **Load atomic data** into the dimensional model; summaries are optional extras.
+2. **Model business processes**, not departments or reports.
+3. **Every fact table has a date dimension** (at least one).
+4. **All facts in a fact table are at the same grain.**
+5. **Resolve many-to-many relationships in fact tables** (or bridges), not in dimensions.
+6. **Resolve many-to-one relationships in dimension tables** by flattening hierarchies.
+7. **Labels and filter values live in dimensions**, not codes in facts.
+8. **Dimensions use surrogate keys.**
+9. **Conform dimensions** to integrate processes.
+10. **Balance business requirements with data realities.**
+
+## The four steps
+
+**Process → Grain → Dimensions → Facts.** In that order, always.
+
+## Fact table types
+
+| | Transaction | Periodic snapshot | Accumulating snapshot | Factless |
+|---|---|---|---|---|
+| Row = | event | entity × period | process instance | event or coverage |
+| Updated? | no | no | yes | no |
+| Dates | 1 | 1 (period) | many (milestones) | 1+ |
+| Typical facts | amounts, qty | balances (semi-additive) | lags, counters | none / counter |
+
+## Additivity
+
+| Additive | Semi-additive | Non-additive |
+|---|---|---|
+| sum anything | not across time (use period-end or average) | never sum: compute from components |
+| qty, amounts | balances, levels, headcount | ratios, %, unit prices, distinct counts |
+
+## SCD types
+
+| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| retain original | overwrite | new row | prior column | mini-dim | 4 + current outrigger | 2 + current columns | surrogate + durable key on fact |
+
+## Dimension patterns
+
+| Pattern | When |
+|---|---|
+| Degenerate | Transaction id with no attributes → keep on the fact |
+| Junk | Many low-cardinality flags → one combined dimension |
+| Role-playing | Same dimension, several FKs → one table, a view per role |
+| Conformed | Shared across processes → one dbt model in `core` |
+| Shrunken | Rollup grain (month, category) → built from the base dimension |
+| Mini-dimension | Volatile banded attributes of a big dimension |
+| Outrigger | Rare: attribute cluster with a different grain or cadence |
+| Bridge | Many-to-many (multivalued) or ragged hierarchy |
+| Special members | `-1` Unknown, `-2` Not applicable / not yet / anonymous |
+
+## dbt idioms from the lab
+
+```sql
+-- surrogate keys
+{{ dbt_utils.generate_surrogate_key(['sku', 'valid_from']) }} as product_key
+{{ dbt_utils.generate_surrogate_key(['sku']) }}               as product_durable_key
+
+-- point-in-time (Type 2) join, half-open interval
+and f.event_ts >= d.valid_from and f.event_ts < d.valid_to
+
+-- never-null foreign keys
+coalesce(d.product_key, '-1') as product_key
+
+-- integer smart date key
+(year(d) * 10000 + month(d) * 100 + day(d)) as date_key
+```
+
+```yaml
+# grain test + no fan-out
+data_tests:
+  - dbt_utils.unique_combination_of_columns:
+      arguments: {combination_of_columns: [transaction_id, line_number]}
+  - dbt_utils.equal_rowcount:
+      arguments: {compare_model: ref('stg_cascade__pos_transactions')}
+```
+
+## Red flags in a design review
+
+- A fact table with no clear grain statement, or rows that mean different things.
+- Natural keys as fact FKs; null FKs.
+- Header amounts repeated on lines.
+- Stored percentages or averages in facts.
+- `sum()` of balances over time.
+- Snowflaked dimensions; codes without descriptions.
+- Two different "product" dimensions.
+- Joining two fact tables directly.
+- Type 2 on everything, or on rapidly changing attributes.

@@ -1,0 +1,135 @@
+---
+title: Additive, semi-additive and non-additive facts
+description: Which facts you can sum across which dimensions, and how to handle balances, ratios and distinct counts.
+sidebar_position: 1
+---
+
+# Additive, semi-additive and non-additive facts
+
+<KimballRef chapters={[2, 3, 4]} techniques={['Additive, Semi-Additive, Non-Additive Facts']}>
+Additive facts are introduced with retail sales (Ch. 3); semi-additive facts with inventory balances (Ch. 4).
+</KimballRef>
+
+The most important property of a fact is **which dimensions you can sum it across**.
+
+| Type | Can be summed across... | Examples in the lab |
+|---|---|---|
+| **Additive** | every dimension | `sales_quantity`, `extended_net_sales_amount`, `quantity_change` |
+| **Semi-additive** | some dimensions, typically **not time** | `quantity_on_hand`, `ending_balance_amount`, `headcount` |
+| **Non-additive** | no dimension | unit price, gross margin %, ratios, distinct counts, temperatures |
+
+## Additive facts
+
+The most useful kind. Design for them: store **extended amounts** (quantity × unit price) instead of unit
+amounts, and **components** of ratios (profit *and* revenue) instead of the ratio.
+
+```sql
+-- Sales by department by quarter: every SUM is valid at every level.
+select
+    d.calendar_year_quarter,
+    p.department,
+    sum(f.sales_quantity)               as units,
+    sum(f.extended_net_sales_amount)    as net_sales,
+    sum(f.extended_gross_profit_amount) as gross_profit
+from fct_retail_sales f
+join dim_date d    on d.date_key = f.date_key
+join dim_product p on p.product_key = f.product_key
+group by all;
+```
+
+## Semi-additive facts
+
+**Balances** (inventory on hand, account balance, headcount) measure a *level at a point in time*. Summing
+across products or stores on one day is fine: total units on hand across all stores. Summing **across days** is
+nonsense: Monday's 50 units plus Tuesday's 50 units is not 100 units.
+
+The inventory periodic snapshot makes this concrete:
+
+<DbtFile path="models/marts/inventory/fct_inventory_daily_snapshot.sql" />
+
+To report a semi-additive fact over a period you choose **one** of:
+
+<Tabs>
+<TabItem value="end" label="Period-end balance">
+
+```sql
+-- Units on hand at the end of each month: take the LAST day's value.
+select
+    d.year_month,
+    p.category,
+    sum(f.quantity_on_hand) as month_end_units_on_hand
+from fct_inventory_daily_snapshot f
+join dim_date d    on d.date_key = f.date_key
+join dim_product p on p.product_key = f.product_key
+where d.month_end_indicator = 'Month End'
+group by all;
+```
+
+</TabItem>
+<TabItem value="avg" label="Average balance">
+
+```sql
+-- Average daily units on hand in each month:
+-- sum across products/stores for each day FIRST, then average across days.
+select year_month, category, avg(daily_units) as avg_daily_units_on_hand
+from (
+    select d.year_month, d.full_date, p.category, sum(f.quantity_on_hand) as daily_units
+    from fct_inventory_daily_snapshot f
+    join dim_date d    on d.date_key = f.date_key
+    join dim_product p on p.product_key = f.product_key
+    group by all
+)
+group by all;
+```
+
+</TabItem>
+<TabItem value="wrong" label="Wrong">
+
+```sql
+-- WRONG: averages across product x store x day rows. The result is
+-- "average on-hand of one product in one store on one day", not the
+-- category's average inventory. And SUM() here would be meaningless.
+select d.year_month, p.category, avg(f.quantity_on_hand)
+from fct_inventory_daily_snapshot f
+join dim_date d    on d.date_key = f.date_key
+join dim_product p on p.product_key = f.product_key
+group by all;
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Snowflake idiom for period-end values
+When the snapshot isn't dense, or you want "latest known balance", use `QUALIFY`:
+
+```sql
+select *
+from fct_inventory_daily_snapshot
+qualify row_number() over (partition by product_key, store_key order by date_key desc) = 1;
+```
+:::
+
+## Non-additive facts
+
+Ratios, percentages, unit prices and **distinct counts** can't be summed at all. The rules:
+
+1. **Store the additive components**, compute the ratio at query time: `sum(gross_profit) / sum(net_sales)`,
+   never `avg(margin_pct)`.
+2. **Distinct counts don't roll up.** "Customers this month" ≠ Σ "customers each day". Compute them from atomic
+   data at the level you need, or use approximate sketches (`hll`) in Snowflake.
+3. Put ratio definitions in **one place**: a [semantic layer](/dbt/semantic-layer) ratio metric is ideal.
+
+<DbtFile path="models/semantic/sem_retail_sales.yml" lines={[52, 77]} title="Ratio metrics in the dbt Semantic Layer" />
+
+## Pitfalls
+
+- **Pre-computing a percentage in the fact table.** Every rollup becomes wrong.
+- **A count-distinct column in an aggregate table.** `agg_sales_monthly_category_store.transaction_count`
+  is correct at its own grain and wrong if summed across months or categories, so the lab documents it as such.
+- **BI tools defaulting to SUM.** Mark semi-additive measures explicitly in your BI tool or semantic layer.
+
+<Quiz questions={[
+  {question: 'Which fact is semi-additive?', options: ['Units sold', 'Account balance at month end', 'Discount amount', 'Shipping charge'], answer: 1, explanation: 'Balances are levels at a point in time: summable across accounts, not across months.'},
+  {question: 'How should you compute gross margin % for a quarter?', options: ['AVG(daily margin %)', 'SUM(margin %)', 'SUM(gross profit) / SUM(net sales)', 'MAX(margin %)'], answer: 2, explanation: 'Ratios must be computed from additive components at the level of the report.'},
+  {question: 'Daily distinct customers for 30 days sum to 9,000. What do you know about distinct customers for the month?', options: ['It is 9,000', 'It is at most 9,000', 'It is at least 9,000', 'Nothing at all'], answer: 1, explanation: 'Customers who shop on multiple days are counted repeatedly in the daily figures, so the monthly distinct count is at most 9,000 (and usually much less).'},
+]} />

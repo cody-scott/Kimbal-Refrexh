@@ -1,0 +1,47 @@
+---
+title: "Module 3: Slowly changing dimensions"
+sidebar_label: Overview
+description: Kimball's SCD Types 0 to 7, each implemented in the lab, plus dbt snapshots vs change-log history.
+sidebar_position: 0
+---
+
+# Module 3: Slowly changing dimensions
+
+Dimension attributes change: a product moves category, a customer moves city, an employee is promoted.
+**What should history look like afterwards?** Kimball catalogs eight standard answers, Types 0 to 7, and the
+right one is chosen **per attribute**, not per table.
+
+## The running example
+
+On **2025-03-01**, Cascade moved *Wool Hiking Socks* (SKU-2004) from category **Footwear** to **Socks &
+Accessories**. Before that date it sold \$17,034.00; after, \$42,202.80. Each SCD type answers "what category do
+those sales belong to?" differently.
+
+| Type | Kimball name | Technique | Sales Jan–Feb report under | History? |
+|---|---|---|---|---|
+| 0 | Retain Original | Never change the value | Footwear forever (original category) | Original only |
+| 1 | Overwrite | Update in place | Socks & Accessories (current) | None |
+| 2 | Add New Row | New version row with effective dates | Footwear (as it was) | Full |
+| 3 | Add New Attribute | `prior_category` column | Either, one prior value | One level |
+| 4 | Add Mini-Dimension | Volatile attributes split into a banded mini-dim; fact carries both keys | (for rapidly changing attributes) | In the fact |
+| 5 | Add Mini-Dimension and Type 1 Outrigger | Type 4 + current mini-dim key on the base dim | (current profile without the fact) | In the fact + current |
+| 6 | Add Type 1 Attributes to Type 2 Dimension | Type 2 rows also carry current values | Either, from one join | Full + current |
+| 7 | Dual Type 1 and Type 2 Dimensions | Fact carries surrogate *and* durable key | Either, by choice of join | Full + current |
+
+Run `analyses/as_was_vs_as_is.sql` in the lab to see Type 2 vs Type 7 side by side.
+
+## Lessons
+
+| Lesson | Lab models |
+|---|---|
+| [Types 0 and 1](/scd/types-0-and-1) | `scd_type0_product`, `scd_type1_product` |
+| [Type 2: add new row](/scd/type-2) | `dim_product`, `dim_customer`, `int_product_versions` |
+| [Type 3: add new attribute](/scd/type-3) | `scd_type3_product` |
+| [Type 4: mini-dimensions](/scd/type-4-mini-dimensions) | `dim_customer_demographics` |
+| [Types 5, 6 and 7: hybrids](/scd/types-5-6-7) | `scd_type5_customer`, `scd_type6_product`, `scd_type7_product_current` |
+| [dbt snapshots vs change logs](/scd/snapshots-vs-change-logs) | `snapshots/`, `scd2_from_change_log` macro |
+| [Choosing an SCD strategy](/scd/choosing-a-strategy) | design exercises |
+
+<KimballRef chapters={[5, 2]} techniques={['Type 0: Retain Original', 'Type 1: Overwrite', 'Type 2: Add New Row', 'Type 3: Add New Attribute', 'Type 4: Add Mini-Dimension', 'Type 5: Add Mini-Dimension and Type 1 Outrigger', 'Type 6: Add Type 1 Attributes to Type 2 Dimension', 'Type 7: Dual Type 1 and Type 2 Dimensions']}>
+The Procurement chapter (Ch. 5) is where Kimball teaches all eight types in depth. Read it alongside this module.
+</KimballRef>

@@ -1,0 +1,49 @@
+---
+title: Reading guide
+description: How to read The Data Warehouse Toolkit (3rd ed.) alongside this site, chapter by chapter.
+sidebar_position: 2
+hide_progress: true
+---
+
+# Reading guide
+
+*The Data Warehouse Toolkit, 3rd Edition* (Ralph Kimball and Margy Ross, Wiley, 2013) is the primary source for this
+site. Below is a suggested reading path that pairs each chapter with lessons and lab models.
+
+| Ch. | Title | Read with | Lab |
+|---|---|---|---|
+| 1 | Data Warehousing, BI, and Dimensional Modeling Primer | [Why dimensional modeling](/foundations/why-dimensional-modeling), [Approaches](/foundations/modeling-approaches) | |
+| 2 | Kimball Dimensional Modeling Techniques Overview | [Techniques index](/reference/techniques-index). Use Ch. 2 as the reference you return to. | |
+| 3 | Retail Sales | [Four-step process](/foundations/four-step-process), [Module 2](/dimensions), [Retail case study](/case-studies/retail-sales) | `marts/retail` |
+| 4 | Inventory | [Periodic snapshots](/facts/periodic-snapshot-fact-tables), [Module 5](/bus), [Inventory case study](/case-studies/inventory) | `marts/inventory` |
+| 5 | Procurement | [Module 3: SCDs](/scd), [Procurement case study](/case-studies/procurement) | `marts/procurement`, `marts/scd_lab` |
+| 6 | Order Management | [Role-playing](/dimensions/role-playing-dimensions), [Junk](/dimensions/junk-dimensions), [Allocation](/advanced/header-line-and-allocation), [Order mgmt case study](/case-studies/order-management) | `marts/orders` |
+| 7 | Accounting | [Ragged hierarchies](/advanced/ragged-and-recursive-hierarchies), [Consolidated facts](/advanced/consolidated-fact-tables), [Accounting case study](/case-studies/accounting) | `marts/accounting` |
+| 8 | Customer Relationship Management | [Bridges](/advanced/multivalued-dimensions-and-bridges), [Type 4](/scd/type-4-mini-dimensions), [CRM case study](/case-studies/crm) | `marts/crm` |
+| 9 | Human Resources Management | [HR case study](/case-studies/human-resources) | `marts/hr` |
+| 10 | Financial Services | [Financial services](/case-studies/financial-services), [Supertype/subtype](/advanced/supertype-subtype) | |
+| 11 | Telecommunications | [Spot the error](/practice/spot-the-error) (design review practice) | |
+| 12 | Transportation | [Transportation](/case-studies/transportation) | |
+| 13 | Education | [Education](/case-studies/education) | |
+| 14 | Healthcare | [Healthcare](/case-studies/healthcare) | |
+| 15 | Electronic Commerce | [E-commerce clickstream](/case-studies/ecommerce-clickstream) | |
+| 16 | Insurance | [Insurance](/case-studies/insurance) | |
+| 17 | Kimball DW/BI Lifecycle Overview | [Value chain & roadmap](/bus/value-chain-and-roadmap) | |
+| 18 | Dimensional Modeling Process and Tasks | [Requirements & workshops](/foundations/requirements-and-workshops) | |
+| 19 | ETL Subsystems and Techniques | [ETL subsystems in dbt](/dbt/etl-subsystems-in-dbt), [Module 6](/dbt) | the whole project |
+| 20 | ETL System Design and Development | [Incremental facts](/dbt/incremental-facts), [Testing](/dbt/testing-dimensional-models) | |
+| 21 | Big Data Analytics | [More techniques](/advanced/more-techniques) | |
+
+## Suggested paths
+
+- **Four-week core:** Week 1: Ch. 1–3 + Modules 0–2. Week 2: Ch. 4–5 + Modules 1 and 3. Week 3: Ch. 6–7 + Module 4.
+  Week 4: Ch. 8–9 + Modules 5–6 and the capstone.
+- **Interview prep in a weekend:** Ch. 2 + the [cheat sheet](/reference/cheat-sheet) + [interview questions](/practice/interview-questions)
+  + [spot the error](/practice/spot-the-error).
+
+## Other Kimball sources
+
+- **Kimball Group website**: the [techniques list](https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/)
+  and the archive of **Design Tips** and articles.
+- ***The Kimball Group Reader*** (2nd ed., 2016): the collected articles and design tips, organized by topic.
+- ***The Data Warehouse Lifecycle Toolkit*** (2nd ed., 2008): the full project lifecycle, from requirements to deployment.

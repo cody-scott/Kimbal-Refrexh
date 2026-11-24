@@ -1,0 +1,88 @@
+---
+title: Periodic snapshot fact tables
+description: Regular, predictable snapshots of balances and levels. Inventory on hand and GL balances in the lab.
+sidebar_position: 3
+---
+
+# Periodic snapshot fact tables
+
+<KimballRef chapters={[4, 7, 9]} techniques={['Periodic Snapshot Fact Tables', 'Additive, Semi-Additive, Non-Additive Facts']}>
+Inventory (Ch. 4) introduces the periodic snapshot; it recurs for GL balances (Ch. 7) and headcount (Ch. 9).
+</KimballRef>
+
+Some questions are about **state**, not events: *How much inventory is on hand? What's the account balance?
+How many employees do we have?* You can in principle derive state by summing every transaction since the
+beginning of time, but it's expensive and fragile. A **periodic snapshot** records the state at regular
+intervals instead.
+
+- **Grain:** one row per entity per period (day, week, month), e.g. one row per product per store per day.
+- **Dense:** a row exists for every entity in every period, *even if nothing changed*. Zero is a value.
+- **Predictable size:** entities × periods.
+- Facts are typically **semi-additive levels** (on hand, balance) plus **additive period totals** (activity
+  during the period).
+
+## Inventory: snapshot and transactions together
+
+Kimball's Inventory chapter shows that one process can be modeled three complementary ways. Two of them are in the lab:
+
+<Tabs>
+<TabItem value="snap" label="Periodic snapshot">
+
+<DbtFile path="models/marts/inventory/fct_inventory_daily_snapshot.sql" />
+
+</TabItem>
+<TabItem value="txn" label="Transaction fact">
+
+<DbtFile path="models/marts/inventory/fct_inventory_transactions.sql" />
+
+</TabItem>
+</Tabs>
+
+| Question | Best table |
+|---|---|
+| Units on hand per store last Friday | Snapshot: one filter, no history scan |
+| Average inventory level this quarter | Snapshot: average of daily totals |
+| How much shrink did we have in March? | Transactions: `movement_type = 'SHRINK'` |
+| How many receipts arrived late in the week? | Transactions |
+| Inventory turns (sales ÷ average inventory) | **Both** via drill-across (see below) |
+
+## A month-end GL balance snapshot
+
+Financial balances are the other classic case. The lab builds a **dense** monthly snapshot by cross-joining
+every account/store combination with every month, then computing a running balance:
+
+<DbtFile path="models/marts/accounting/fct_gl_monthly_balance.sql" />
+
+`period_activity_amount` is fully additive (sum months to get a quarter's activity), while
+`ending_balance_amount` is semi-additive (take the quarter's last month). Carrying both on one row is a
+common, very useful pattern.
+
+## Drill across to combine with transactions
+
+Inventory turns need sales (a transaction fact) and average inventory (a snapshot). Never join the two fact
+tables directly; aggregate each to the common grain, then join on **conformed** attributes:
+
+<DbtFile path="analyses/drill_across_sales_vs_inventory.sql" />
+
+## dbt and Snowflake notes
+
+- **Incremental by period.** A daily snapshot is naturally `incremental` with `unique_key` = the grain and a
+  filter on the snapshot date. Closed periods never change.
+- **Generating density.** If the source only provides changes, build the dense grid by cross-joining a date
+  spine with the entity list, then fill forward with
+  `last_value(x ignore nulls) over (partition by ... order by date)`.
+- **Volume.** 10,000 SKUs × 500 stores × 365 days is 1.8 billion rows a year. That's fine for Snowflake when
+  clustered by date, but consider weekly or month-end snapshots for older history.
+
+## Pitfalls
+
+- **Sparse snapshots.** Leaving out rows where nothing changed means "sum of on hand across products" silently
+  skips items. Snapshots should be dense.
+- **Summing balances over time.** See [additivity](./additivity).
+- **Snapshotting the wrong moment.** Declare *when* in the period the snapshot is taken (end of day? start?).
+  It's part of the grain.
+
+<Quiz questions={[
+  {question: 'A product had no movements on a given day. What should the daily inventory snapshot contain for it?', options: ['No row', 'A row with quantity_on_hand from the previous day', 'A row with zero', 'A null row'], answer: 1, explanation: 'Snapshots are dense: the on-hand level persists even when nothing moves, so the row carries the unchanged balance.'},
+  {question: 'Which fact on fct_gl_monthly_balance can be summed across months?', options: ['ending_balance_amount', 'period_activity_amount', 'Both', 'Neither'], answer: 1, explanation: 'Activity during each period is additive over time; the ending balance is a level and is semi-additive.'},
+]} />

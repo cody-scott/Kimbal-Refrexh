@@ -1,0 +1,77 @@
+---
+title: Audit dimensions and error events
+description: Tracing every fact row to the load that produced it, and capturing data-quality failures as data, both with native dbt features.
+sidebar_position: 8
+---
+
+# Audit dimensions and error events
+
+<KimballRef chapters={[6, 19]} techniques={['Audit Dimensions', 'Error Event Schemas']}>
+The audit dimension appears in Order Management (Ch. 6); Ch. 19's ETL subsystems include the "error event
+schema" and "audit dimension assembler".
+</KimballRef>
+
+## The audit dimension
+
+Kimball recommends stamping each fact row with an **audit key** describing *how it got there*: which load,
+which code version, when, and with what quality outcome. When a number looks wrong, the audit dimension tells you
+which run to investigate.
+
+dbt gives you the natural audit key for free: every run has a unique `invocation_id`.
+
+<DbtFile path="models/marts/core/dim_audit.sql" />
+
+And the fact stamps it on every row it writes:
+
+```sql
+-- in fct_retail_sales.sql
+'{{ invocation_id }}' as audit_key
+```
+
+```sql
+-- Which runs loaded last week's sales, and from which commit?
+select a.run_started_at_utc, a.job_name, a.git_sha, count(*) as fact_rows
+from fct_retail_sales f
+join dim_audit a on a.audit_key = f.audit_key
+where f.transaction_date >= current_date - 7
+group by all
+order by 1;
+```
+
+In production, set `DBT_GIT_SHA` and `DBT_JOB_NAME` in your orchestrator. dbt Cloud also exposes
+`DBT_CLOUD_RUN_ID` and `DBT_CLOUD_JOB_ID` as environment variables.
+
+:::caution Incremental audit tables are stateful
+`dim_audit` accumulates run history, so a `--full-refresh` erases it. Protect it with `full_refresh: false`
+in its config if your team runs full refreshes casually.
+:::
+
+## Error event schemas
+
+Kimball's **error event schema** records every data-quality check failure as rows: which check, which
+table, which record, when. Data quality becomes something you can trend and report on, instead of log lines.
+
+dbt's equivalent is **`store_failures`**: failing test rows are written to tables in an audit schema.
+
+```yaml
+# dbt_project.yml
+data_tests:
+  kimball_lab:
+    +store_failures: true
+    +schema: dq_failures
+```
+
+Then:
+
+```sql
+-- e.g. rows violating the grain of fct_retail_sales on the last run
+select * from dev_dq_failures.dbt_utils_unique_combination_of_columns_fct_retail_sales_transaction_id__line_number;
+```
+
+For a full error-event *fact* (one row per failure per run), parse `run_results.json` after each run, or use a
+package such as `elementary` that does it for you. Kimball's error event fact (date, batch, check, severity,
+record identifier) maps almost one-to-one onto those results.
+
+<Quiz questions={[
+  {question: 'What does dbt\'s invocation_id provide in a Kimball audit design?', options: ['A surrogate key for products', 'A unique identifier for the load that produced each fact row', 'A Type 2 effective date', 'A degenerate dimension from the source'], answer: 1, explanation: 'One dbt run = one load; invocation_id makes a natural audit key.'},
+]} />

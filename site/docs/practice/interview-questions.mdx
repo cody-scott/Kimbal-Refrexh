@@ -1,0 +1,166 @@
+---
+title: Interview questions
+description: Common dimensional modeling and dbt interview questions with model answers.
+sidebar_position: 4
+---
+
+# Interview questions
+
+Try answering aloud before expanding each one. A good answer names the Kimball technique, gives an example
+and states the trade-off.
+
+## Fundamentals
+
+<details>
+<summary>What's the difference between a fact and a dimension?</summary>
+
+Facts are numeric measurements of a business process event, usually additive, at a declared grain (quantity,
+amount). Dimensions provide the descriptive context, the who/what/where/when/why, used to filter, group and
+label (product, store, date). Rule of thumb: if it goes in `SUM()`, it's a fact; if it goes in `GROUP BY` or
+`WHERE`, it's a dimension attribute.
+</details>
+
+<details>
+<summary>Walk me through Kimball's four-step design process.</summary>
+
+1. Select the business process. 2. Declare the grain (what one fact row means, preferably atomic). 3. Identify the
+dimensions (single-valued for each row at that grain). 4. Identify the facts (true to the grain). Grain comes before
+dimensions and facts because it determines which of them are valid.
+</details>
+
+<details>
+<summary>Name the three fundamental fact table types and when to use each.</summary>
+
+**Transaction** (one row per event; sparse; insert-only) for events like sales. **Periodic snapshot** (one row per
+entity per period; dense) for levels like balances and inventory. **Accumulating snapshot** (one row per process
+instance; updated as milestones occur; multiple dates and lag facts) for pipelines like order fulfillment. Plus
+**factless** fact tables for events with no measures and for coverage.
+</details>
+
+<details>
+<summary>What is a semi-additive fact? Give an example and explain how to aggregate it.</summary>
+
+A fact that can be summed across some dimensions but not others, typically not across time. Account balances,
+inventory on hand, headcount. Over time, take the period-end value or the average across periods (summing across
+other dimensions first, per period).
+</details>
+
+<details>
+<summary>Why use surrogate keys? How do you generate them in dbt?</summary>
+
+They enable Type 2 history (a key per version), insulate the warehouse from source key changes and reuse, support
+unknown/N/A rows, and integrate multiple sources. In dbt, usually a deterministic hash
+(`dbt_utils.generate_surrogate_key`) of the natural key (plus `valid_from` for Type 2), because models are rebuilt
+and sequences would change. A persisted key map is the alternative if integers are required.
+</details>
+
+## Slowly changing dimensions
+
+<details>
+<summary>Explain SCD Types 1, 2 and 3. When would you use each?</summary>
+
+**Type 1** overwrites (no history; corrections, attributes nobody analyzes historically). **Type 2** adds a new row
+with a new surrogate key and effective dates (full history; facts reflect values at the time). **Type 3** adds a
+"prior value" column (alternate-reality reporting after a reorg; one level of history). Chosen per attribute, with
+the business.
+</details>
+
+<details>
+<summary>How do you report "as is" and "as was" from the same model?</summary>
+
+Type 7: carry both the surrogate key and a durable key on the fact; join the surrogate key to the Type 2 dimension for
+as-was, and the durable key to a current-rows view for as-is. Or Type 6: add current-value columns to every Type 2 row.
+Never filter `is_current` on a surrogate-key join; that drops historical facts.
+</details>
+
+<details>
+<summary>dbt snapshots vs building history from CDC: trade-offs?</summary>
+
+Snapshots observe current state on each run: easy, but they miss changes between runs, start history only when
+you begin, record load time rather than business time, and are stateful (can't be rebuilt). A change log or CDC
+can reconstruct complete, business-dated history deterministically and idempotently. Prefer CDC when available;
+otherwise snapshot early and protect the tables.
+</details>
+
+<details>
+<summary>What's a mini-dimension and why would you use one?</summary>
+
+Type 4: rapidly changing, analytically useful attributes of a large dimension (age band, income band, score band)
+split into a small dimension of banded combinations. The fact carries both the base dimension key and the
+mini-dimension key, capturing the profile at the time of the event without exploding the base dimension with Type 2
+versions.
+</details>
+
+## Advanced
+
+<details>
+<summary>How do you handle a many-to-many between a fact and a dimension?</summary>
+
+A bridge table (e.g. account ↔ customers, encounter ↔ diagnoses), often via a group key, with a weighting factor so
+weighted reports tie to totals. Clarify weighted vs impact (unweighted, double-counting) reports.
+</details>
+
+<details>
+<summary>How do you model a ragged hierarchy like an org chart?</summary>
+
+Options: flatten and pad if only slightly ragged; a hierarchy bridge table of all ancestor/descendant pairs (with
+distance, including self-pairs) for arbitrary depth; or pathstring attributes. Bridges built with recursive CTEs in
+dbt; time-varying if reorgs matter.
+</details>
+
+<details>
+<summary>An order has a header shipping charge. How does it get into a line-level fact?</summary>
+
+Allocate it to lines with an agreed basis (value, weight, quantity), making sure rounding ties out to the header
+(put the remainder on one line, test it), or keep header facts in an order-grain fact. Never repeat it on every line.
+</details>
+
+<details>
+<summary>How do you compare two business processes, e.g. sales vs inventory?</summary>
+
+Drill across: aggregate each fact table separately to the common grain on conformed dimension attributes, then
+full-outer-join the result sets. Never join fact tables directly at atomic grain (fan-out). If the comparison
+is constant, build a consolidated fact table.
+</details>
+
+<details>
+<summary>What is a conformed dimension and why does it matter?</summary>
+
+A dimension with identical keys, attributes and meaning wherever it's used, which lets different business processes
+be compared (drill-across) and is the integration backbone of the bus architecture. In dbt, one model per
+conformed dimension, referenced by every fact.
+</details>
+
+<details>
+<summary>What's a bus matrix?</summary>
+
+A grid of business processes (rows) against conformed dimensions (columns). It's the architecture, the integration
+plan and the delivery roadmap on one page.
+</details>
+
+## dbt and Snowflake
+
+<details>
+<summary>How do you test a fact table's grain in dbt?</summary>
+
+`dbt_utils.unique_combination_of_columns` on the grain columns, plus a row-count reconciliation against the
+source (`equal_rowcount`) to catch fan-out from bad dimension joins, plus `not_null` + `relationships` on every
+foreign key.
+</details>
+
+<details>
+<summary>How would you load a billion-row transaction fact incrementally on Snowflake?</summary>
+
+`incremental` with `merge` on the grain (or `microbatch` on the event timestamp), a lookback window sized to real
+lateness (or filter on load timestamp), `incremental_predicates` to limit the MERGE scan, `cluster_by` on the date
+key, and periodic full or partial refreshes for backdated dimension changes. Ensure full refresh and incremental give
+the same result.
+</details>
+
+<details>
+<summary>Is One Big Table a replacement for a star schema?</summary>
+
+No. OBTs are a convenient output for specific tools, but they're a poor foundation: definitions drift between
+tables, history choices get frozen in, and mixed grains are easy. Build stars, then materialize wide tables from them
+where needed.
+</details>

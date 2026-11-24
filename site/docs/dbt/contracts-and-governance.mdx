@@ -1,0 +1,58 @@
+---
+title: Contracts, docs and governance
+description: Treating the dimensional presentation layer as an API, with model contracts, constraints, persisted docs, groups and access.
+sidebar_position: 5
+---
+
+# Contracts, docs and governance
+
+<KimballRef chapters={[17, 18]}>
+Kimball stresses that the presentation area is a commitment to business users. Its structure and definitions
+must be stable and documented. dbt contracts and docs make that commitment explicit.
+</KimballRef>
+
+## Model contracts
+
+A **contract** declares the exact columns and types a model must produce. If the SQL drifts (a column renamed,
+a type changed), the build fails *before* downstream users notice. Contracts suit **conformed dimensions** and key
+facts, the models with many consumers.
+
+<DbtFile path="models/marts/core/_core__models.yml" lines={[38, 55]} title="dim_store contract" />
+
+With `contract: {enforced: true}`, dbt creates the table with the declared column types, and on Snowflake adds
+the declared **constraints** (`not null` is enforced; `primary key` is recorded as metadata, which BI tools
+and Snowflake's optimizer can use, but isn't enforced).
+
+## Documentation
+
+- Describe every **model** with its grain (facts) or SCD policy (dimensions).
+- Describe every **column**, at least every key and every fact, with additivity notes for semi- and non-additive
+  measures.
+- `+persist_docs: {relation: true, columns: true}` (set for marts in the lab) writes descriptions into Snowflake
+  table and column **comments**, so they show up in Snowsight and in BI tools that read comments.
+
+## Groups, access and versions
+
+For larger teams (dbt Mesh):
+
+```yaml
+groups:
+  - name: merchandising
+    owner: {name: Merchandising Analytics}
+
+models:
+  - name: dim_product
+    config:
+      group: core_data
+      access: public        # other projects/teams may ref() it
+  - name: int_product_versions
+    config:
+      access: private       # implementation detail
+```
+
+**Model versions** let you change a conformed dimension's contract (say, splitting `category`) while consumers
+migrate: `dim_product_v1` and `dim_product_v2` coexist with a deprecation date.
+
+<Quiz questions={[
+  {question: 'On Snowflake, which declared constraint is actually enforced on a contracted model?', options: ['primary_key', 'unique', 'not_null', 'foreign_key'], answer: 2, explanation: 'Snowflake enforces NOT NULL; PK, unique and FK constraints are informational metadata.'},
+]} />

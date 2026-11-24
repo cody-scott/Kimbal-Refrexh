@@ -43,7 +43,6 @@ models:
         data_tests:
           - not_null
           - relationships: {arguments: {to: ref('dim_employee'), field: employee_key}}
-      - name: product_key
       - name: sales_quantity
         description: Fully additive.
       - name: extended_net_sales_amount

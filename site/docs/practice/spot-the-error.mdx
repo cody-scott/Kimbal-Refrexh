@@ -1,0 +1,209 @@
+---
+title: Spot the error
+description: Broken dimensional models and queries to diagnose and fix, each tied to a Kimball principle.
+sidebar_position: 2
+---
+
+# Spot the error
+
+Each item contains at least one modeling or SQL mistake. Find it, explain the consequence, and fix it.
+
+---
+
+### 1. The mysterious revenue growth
+
+```sql
+select d.year_month, sum(f.extended_net_sales_amount) as net_sales
+from fct_retail_sales f
+join dim_product p on p.sku = (select sku from dim_product where product_key = f.product_key)
+join dim_date d on d.date_key = f.date_key
+group by 1;
+```
+
+<details>
+<summary>Answer</summary>
+
+The query re-joins `dim_product` on **`sku`**, the natural key. Every product with *n* Type 2 versions multiplies its
+sales by *n*, so revenue "grows" as products change. Join on `product_key` (or drop the join, since no product column is
+used). Principle: facts join to dimensions on surrogate keys; the [grain](/foundations/declaring-the-grain) must not fan out.
+</details>
+
+---
+
+### 2. The order table
+
+```text
+fct_orders
+  order_number, line_number, product_key, customer_key, order_date_key,
+  line_amount, order_shipping_charge, order_total_amount
+```
+
+<details>
+<summary>Answer</summary>
+
+`order_shipping_charge` and `order_total_amount` are **header-grain facts on a line-grain table**: summing them
+counts each once per line. Allocate shipping to lines ([lesson](/advanced/header-line-and-allocation)) and drop
+`order_total_amount` (it's `sum(line_amount) + shipping`, derivable), or keep header facts in an order-grain fact.
+</details>
+
+---
+
+### 3. The inventory dashboard
+
+```sql
+-- "Total inventory for Q1"
+select p.category, sum(f.quantity_on_hand) as q1_inventory
+from fct_inventory_daily_snapshot f
+join dim_product p on p.product_key = f.product_key
+join dim_date d on d.date_key = f.date_key
+where d.calendar_year_quarter = '2025-Q1'
+group by 1;
+```
+
+<details>
+<summary>Answer</summary>
+
+`quantity_on_hand` is **semi-additive**: summing it across 90 days gives a number roughly 90× too big. Use the
+quarter-end balance (filter to the last day) or the average daily balance (sum per day, then average across days).
+See [additivity](/facts/additivity).
+</details>
+
+---
+
+### 4. The "current" report
+
+```sql
+-- "Sales by CURRENT category"
+select p.category, sum(f.extended_net_sales_amount)
+from fct_retail_sales f
+join dim_product p on p.product_key = f.product_key
+where p.is_current
+group by 1;
+```
+
+<details>
+<summary>Answer</summary>
+
+Filtering `is_current` on a surrogate-key join **drops every sale recorded under an older version**; for SKU-2004,
+the $17,034 of Footwear-era sales vanish. Use the durable key to a current view (**Type 7**,
+`scd_type7_product_current`) or **Type 6** current columns.
+</details>
+
+---
+
+### 5. The snowflake
+
+```text
+dim_product(product_key, sku, name, subcategory_id)
+dim_subcategory(subcategory_id, name, category_id)
+dim_category(category_id, name, department_id)
+dim_department(department_id, name)
+```
+
+<details>
+<summary>Answer</summary>
+
+A **snowflaked** product hierarchy: four joins to group by department, ambiguous `name` columns, and slower
+browsing, all for negligible savings. Flatten subcategory, category and department into `dim_product` with distinct
+column names. See [snowflaking](/dimensions/outriggers-and-snowflaking).
+</details>
+
+---
+
+### 6. The nullable key
+
+```sql
+select
+    s.transaction_id,
+    p.product_key,         -- null when the SKU isn't in dim_product yet
+    s.quantity * s.unit_price as gross_amount
+from stg_pos s
+left join dim_product p on p.sku = s.sku and s.ts >= p.valid_from and s.ts < p.valid_to
+```
+
+<details>
+<summary>Answer</summary>
+
+Null foreign keys **disappear from inner joins**, so totals by product category are understated with no warning.
+Use `coalesce(p.product_key, '-1')` to point at the Unknown member, or better, create an **inferred member** for
+the new SKU. Test with `not_null` + `relationships`. See [special members](/dimensions/special-members).
+</details>
+
+---
+
+### 7. The incremental model
+
+```sql
+{{ config(materialized='incremental', unique_key='transaction_id') }}
+select ... from {{ ref('stg_pos') }}
+{% if is_incremental() %}
+where transaction_ts > (select max(transaction_ts) from {{ this }})
+{% endif %}
+```
+
+<details>
+<summary>Answer</summary>
+
+Two bugs. (1) `unique_key='transaction_id'` is coarser than the line grain, so lines of the same ticket collide in
+the merge. Use `['transaction_id', 'line_number']`. (2) A strict high-water mark on the **event** timestamp
+skips late-arriving rows. Use a lookback window or a load timestamp. See
+[incremental facts](/dbt/incremental-facts).
+</details>
+
+---
+
+### 8. The averaged margin
+
+```sql
+select p.department, avg(f.gross_margin_pct) as margin
+from fct_sales_with_margin f join dim_product p using (product_key)
+group by 1;
+```
+
+<details>
+<summary>Answer</summary>
+
+A stored percentage, then **averaged**: each line counts equally regardless of size, so a $2 sock line weighs the
+same as a $500 tent. Store the additive components and compute `sum(gross_profit) / sum(net_sales)`.
+</details>
+
+---
+
+### 9. The drill-across
+
+```sql
+select p.category, sum(s.extended_net_sales_amount) as sales, sum(r.transaction_quantity) as units_received
+from fct_retail_sales s
+join fct_procurement_transactions r on r.product_key = s.product_key
+join dim_product p on p.product_key = s.product_key
+where r.procurement_transaction_type_key = (select procurement_transaction_type_key from dim_procurement_transaction_type where transaction_type = 'RECEIVED')
+group by 1;
+```
+
+<details>
+<summary>Answer</summary>
+
+**Fact-to-fact join** on `product_key`: every sale matches every receipt of the same product, so both sums are
+massively inflated. Aggregate each fact to category separately, then join the two result sets (drill-across).
+See [conformed facts and drill-across](/bus/conformed-facts-and-drill-across).
+</details>
+
+---
+
+### 10. The Type 3 shortcut
+
+```sql
+select sku, category as current_category,
+       lag(category) over (partition by sku order by valid_from) as prior_category
+from int_product_versions
+qualify is_current;
+```
+
+<details>
+<summary>Answer</summary>
+
+`qualify is_current` is evaluated after the window, so `lag` sees all versions, which looks right. But if the
+latest version was opened by a change to a **different** attribute (package size), `lag(category)` returns the
+*same* category. Prior category must come from the last version where category actually changed. See
+[Type 3](/scd/type-3).
+</details>

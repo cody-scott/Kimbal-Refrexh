@@ -1,0 +1,84 @@
+---
+title: Role-playing dimensions
+description: One physical dimension referenced several times by a fact table, e.g. order date and ship date, with role views in dbt.
+sidebar_position: 7
+---
+
+# Role-playing dimensions
+
+<KimballRef chapters={[6, 12]} techniques={['Role-Playing Dimensions']}>
+Order Management (Ch. 6) introduces order date / requested ship date roles; Transportation (Ch. 12) has
+origin and destination airports.
+</KimballRef>
+
+A single physical dimension can be referenced **several times by the same fact table**, each time in a
+different *role*:
+
+| Fact | Dimension | Roles |
+|---|---|---|
+| `fct_order_lines` | `dim_date` | order date, ship date |
+| `fct_order_fulfillment` | `dim_date` | order, ship, delivery, return dates |
+| `fct_po_line_pipeline` | `dim_date` | issued, received, invoiced, paid dates |
+| `fct_retail_sales` | `dim_employee` | cashier (could add: sales associate, approving manager) |
+| *Airline segment fact* | airport | origin, destination |
+
+There is **one physical table**. Copying `dim_date` into `dim_order_date` and `dim_ship_date` tables would
+double maintenance for no benefit.
+
+## Why role views help
+
+Joining the same table twice in SQL is easy with aliases, but the *columns* collide: both roles have
+`year_month`, `calendar_quarter` and so on. BI tools and semantic layers struggle to tell them apart. Kimball's
+solution is a **view per role with role-specific column names**:
+
+<Tabs>
+<TabItem value="ship" label="dim_ship_date">
+
+<DbtFile path="models/marts/orders/dim_ship_date.sql" />
+
+</TabItem>
+<TabItem value="order" label="dim_order_date">
+
+<DbtFile path="models/marts/orders/dim_order_date.sql" />
+
+</TabItem>
+</Tabs>
+
+Views cost nothing in Snowflake, and they're always in sync with `dim_date`.
+
+## Querying
+
+```sql
+-- Orders placed in one month but shipped the next ("month-boundary carryover")
+select
+    od.order_year_month,
+    sd.ship_year_month,
+    count(distinct f.order_number) as orders
+from fct_order_lines f
+join dim_order_date od on od.order_date_key = f.order_date_key
+join dim_ship_date sd  on sd.ship_date_key  = f.ship_date_key
+where sd.ship_date_key > 0            -- exclude "Not Yet Happened"
+group by all
+having od.order_year_month <> sd.ship_year_month
+order by 1;
+```
+
+Without role views the same query needs careful aliasing of every column:
+
+```sql
+select o.year_month as order_year_month, s.year_month as ship_year_month, ...
+from fct_order_lines f
+join dim_date o on o.date_key = f.order_date_key
+join dim_date s on s.date_key = f.ship_date_key
+```
+
+## In the dbt Semantic Layer
+
+MetricFlow handles roles with **multiple entities or time dimensions pointing at the same model**. You declare
+`order_date` and `ship_date` as separate time dimensions on the semantic model, and `dim_date` can be joined
+in each role through a distinct entity name.
+
+<Quiz questions={[
+  {question: 'What is a role-playing dimension?', options: ['A dimension that changes over time', 'One physical dimension referenced several times by a fact in different roles', 'A dimension that lists employee roles', 'A dimension with no attributes'], answer: 1, explanation: 'Order date and ship date both reference dim_date: one table, two roles.'},
+  {question: 'Why does the lab implement roles as views rather than tables?', options: ['Views are faster', 'They need no storage or maintenance and stay in sync with the base dimension', 'Snowflake requires it', 'Tables cannot be renamed'], answer: 1, explanation: 'A role is just a renamed projection of the same data, which is exactly what a view is.'},
+]} />

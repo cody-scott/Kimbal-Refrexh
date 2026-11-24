@@ -1,0 +1,70 @@
+---
+title: Late-arriving data
+description: Late-arriving facts matched to historical dimension versions, and late-arriving dimension members handled with inferred rows.
+sidebar_position: 3
+---
+
+# Late-arriving data
+
+<KimballRef chapters={[19]} techniques={['Late Arriving Facts', 'Late Arriving Dimensions']}>
+Kimball's "late arriving data handler" ETL subsystem (Ch. 19) covers both cases.
+</KimballRef>
+
+"Late" means out of order relative to what's already in the warehouse.
+
+## Late-arriving facts
+
+A fact arrives days or weeks after the event: a store's POS upload fails and catches up next week, or a
+vendor sends last month's invoices.
+
+Two things must go right:
+
+1. **Dimension lookups use the event time**, not the load time. A sale from March must get the March product
+   version, the March customer address, the March cashier role. The point-in-time join handles this
+   automatically, because it uses `s.transaction_ts`:
+
+   ```sql
+   left join {{ ref('dim_customer') }} as c
+       on  c.customer_id = s.customer_id
+       and s.transaction_ts >= c.valid_from
+       and s.transaction_ts <  c.valid_to
+   ```
+
+2. **The incremental model must pick it up.** A filter like `where transaction_ts > (select max(transaction_ts) from {{ this }})`
+   misses rows dated before the high-water mark. Options:
+   - a **lookback window** on the event date (the lab uses 3 days): simple, and catches most lateness;
+   - filter on a **load timestamp** (`_loaded_at`) from the source instead of the business date. This is the most
+     robust option, because a row that arrives late has a *new* load timestamp even though its event date is old;
+   - periodic **full refreshes** of recent partitions for anything later still.
+
+   With `merge` on the grain, reprocessing is idempotent.
+
+Downstream, **periodic snapshots and aggregates for the affected periods must be rebuilt**. In dbt that happens
+if they're downstream in the same run and either full-rebuilt or incremental with a matching lookback.
+
+## Late-arriving dimension members
+
+A fact references a dimension member that **doesn't exist yet**. Covered in depth in
+[Special members](/dimensions/special-members#late-arriving-dimensions-inferred-members). In short:
+create an **inferred member** row from the natural key, flag it, attach the fact, and overwrite the row's
+attributes when the real record arrives.
+
+## Late-arriving dimension *changes*
+
+The subtlest case: you learn today that a customer **moved on March 1**, but sales since March 1 were already
+loaded pointing to the old version.
+
+| Approach | Effect |
+|---|---|
+| Classic ETL | Insert the new version with `valid_from = March 1`, then **update the surrogate key on every fact since March 1**. Expensive and error-prone. |
+| dbt with a change log + rebuilt dimension | The dimension rebuild creates the version effective March 1. Facts must **re-resolve their keys**: a full refresh, or a lookback window long enough to cover the backdated change. |
+| Accept it | Treat backdated changes as effective from when you learned of them. Simpler, and sometimes the business prefers it. |
+
+Because hashed surrogate keys are deterministic (natural key + `valid_from`), rebuilding a fact from source
+always re-derives the correct keys. That's one of the biggest practical advantages of the dbt approach over
+sequence-keyed ETL.
+
+<Quiz questions={[
+  {question: 'A March sale arrives in June. With point-in-time joins on transaction_ts, which customer version does it get?', options: ['The June (current) version', 'The version effective in March', 'Unknown', 'Whichever was loaded first'], answer: 1, explanation: 'The join compares the event timestamp to the validity range, so late facts land on the historically correct version.'},
+  {question: 'Why is filtering incremental loads on a load timestamp more robust than on the event date?', options: ['Load timestamps are smaller', 'A late row has an old event date but a new load timestamp, so it is never skipped', 'Event dates can be null', 'It is not more robust'], answer: 1, explanation: 'High-water marks on event dates skip rows that arrive after newer events were loaded.'},
+]} />

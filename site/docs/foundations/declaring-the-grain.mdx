@@ -1,0 +1,118 @@
+---
+title: Declaring the grain
+description: How to write a precise grain statement, why atomic grain wins, and how dbt tests enforce it.
+sidebar_position: 4
+---
+
+# Declaring the grain
+
+<KimballRef chapters={[2, 3, 4]} techniques={['Grain', 'Transaction fact tables', 'Periodic snapshot fact tables', 'Accumulating snapshot fact tables']}>
+Kimball calls grain declaration the pivotal step. Chapter 4 (Inventory) shows one process modeled at three
+different grains, the clearest illustration of why the grain must be explicit.
+</KimballRef>
+
+## What a grain statement is
+
+The grain is a sentence, in **business language**, that says what a single fact row represents:
+
+| Good grain statement | Why it's good |
+|---|---|
+| "One row per product line item on a POS ticket." | Physical, observable event. Anyone can count them. |
+| "One row per product per store per day, showing end-of-day on-hand quantity." | Clear snapshot period and measurement timing. |
+| "One row per purchase order line, updated as it moves through issued → received → invoiced → paid." | Clear entity and lifecycle. |
+
+| Weak grain statement | Problem |
+|---|---|
+| "Sales data." | Not a grain. |
+| "One row per `transaction_id`, `sku`, `store_id`, `date_key`." | Lists *keys*, not meaning. And is it unique? A ticket can contain the same SKU twice. |
+| "Daily sales, plus monthly targets." | **Two grains** in one table. |
+
+Declare the grain in business terms first. The *key columns* that implement it come afterwards.
+
+## The three fundamental grains
+
+Kimball identifies three types of fact table. Each has its own natural grain:
+
+| Type | Grain is... | Lab example |
+|---|---|---|
+| [Transaction](/facts/transaction-fact-tables) | one row per event at an instant | `fct_retail_sales`: per ticket line |
+| [Periodic snapshot](/facts/periodic-snapshot-fact-tables) | one row per entity per regular period | `fct_inventory_daily_snapshot`: per product, store, day |
+| [Accumulating snapshot](/facts/accumulating-snapshot-fact-tables) | one row per instance of a process with a defined beginning and end, updated as it progresses | `fct_po_line_pipeline`: per PO line |
+
+## Prefer atomic grain
+
+The **atomic** grain is the lowest level the source captures. Kimball's guidance is to always load atomic data
+into the dimensional model, and add summaries on top only for performance.
+
+Consider two designs for retail sales:
+
+<Tabs>
+<TabItem value="atomic" label="Atomic: ticket line">
+
+```sql
+-- Answers: basket size, product affinity, hour-of-day patterns,
+-- cashier performance, and anything rolled up from those.
+select
+    count(distinct transaction_id)                   as baskets,
+    sum(sales_quantity) / count(distinct transaction_id) as avg_units_per_basket
+from fct_retail_sales;
+```
+
+</TabItem>
+<TabItem value="summary" label="Pre-aggregated: product × store × day">
+
+```sql
+-- Cannot answer: baskets, affinity, time of day, cashier.
+-- Can never be recovered without reloading from source.
+select sum(sales_quantity)
+from daily_sales_summary;
+```
+
+</TabItem>
+</Tabs>
+
+## Never mix grains
+
+The cardinal sin is a fact table whose rows mean different things. Classic examples:
+
+- Line items **and** an order-total row in the same table: summing doubles the revenue.
+- Daily actuals **and** monthly budget rows: every `SUM()` must remember to filter.
+- A "ticket total" column repeated on every line: `SUM(ticket_total)` is wrong whenever a ticket has
+  more than one line.
+
+If facts naturally occur at different grains, build **separate fact tables**, or
+[allocate](/advanced/header-line-and-allocation) the coarser fact down to the finer grain.
+
+## Enforce the grain in dbt
+
+A grain you don't test is a grain you merely hope for. In the lab, every fact's grain is a data test:
+
+<DbtFile path="models/marts/retail/_retail__models.yml" lines={[1, 16]} />
+
+- `unique_combination_of_columns` proves no two rows share the grain keys.
+- `equal_rowcount` proves every source event produced exactly one fact row: no fan-out from a bad
+  dimension join, and no rows dropped.
+
+The second test is the one people forget. A Type 2 dimension joined without the effective-date condition
+silently multiplies fact rows, and only a row-count test catches it.
+
+<Quiz questions={[
+  {question: 'Which is the best grain statement for a table built from POS data?', options: ['transaction_id, sku', 'One row per product line item on a POS ticket', 'Sales by product', 'One row per store per day'], answer: 1, explanation: 'A grain is a business description of what one row represents. A list of columns is how you implement it, and transaction_id + sku is not even unique if the same SKU appears on two lines.'},
+  {question: 'You join fct_retail_sales to a Type 2 product dimension on sku only. What happens?', options: ['Nothing; sku is unique', 'Each sale is multiplied by the number of versions of its product', 'Rows are dropped', 'Snowflake raises an error'], answer: 1, explanation: 'sku is unique per product, but a Type 2 dimension has one row per version. Without the effective-date predicate the join fans out. An equal_rowcount test catches this.'},
+  {question: 'Why does Kimball recommend atomic grain even if nobody asks for detail today?', options: ['It is cheaper to store', 'Detailed data can always be rolled up, but summaries can never be drilled into', 'BI tools require it', 'Because aggregates are illegal'], answer: 1, explanation: 'Atomic data answers unanticipated questions and absorbs new dimensions without redesign.'},
+]} />
+
+## Exercise
+
+<details>
+<summary>A stakeholder asks for "a table with each web order and its lines". What grain(s) would you build?</summary>
+
+Two facts at two grains:
+
+1. **Order line transaction fact** (`fct_order_lines`): one row per order line, with order-header facts
+   such as shipping charge *allocated* to lines.
+2. **Order accumulating snapshot** (`fct_order_fulfillment`): one row per order, tracking placed → shipped →
+   delivered → returned dates and lags.
+
+Don't produce one table where some rows are lines and some are headers.
+</details>

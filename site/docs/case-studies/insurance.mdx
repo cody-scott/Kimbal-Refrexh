@@ -1,0 +1,68 @@
+---
+title: "Case study: Insurance (design)"
+sidebar_label: Insurance
+description: Policy transactions, premium periodic snapshots, claims accumulating snapshots, heterogeneous coverages and mini-dimensions.
+sidebar_position: 13
+---
+
+# Case study: Insurance (design)
+
+<KimballRef chapters={[16]} techniques={['Transaction Fact Tables', 'Periodic Snapshot Fact Tables', 'Accumulating Snapshot Fact Tables', 'Supertype and Subtype Schemas for Heterogeneous Products', 'Type 4: Add Mini-Dimension', 'Timespan Tracking in Fact Tables', 'Enterprise Data Warehouse Bus Matrix']}>
+Kimball's insurance chapter is a capstone that uses all three fundamental fact types together.
+</KimballRef>
+
+*Not built in the lab. Treat it as a design exercise with a worked answer.*
+
+## The business
+
+A property and casualty insurer sells auto and home policies. Underwriting, finance and claims all need
+analytics.
+
+## Bus matrix
+
+| Process | Date | Policyholder | Policy | Coverage | Covered item | Agent | Claim | Claimant |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Policy transactions | ● | ● | ● | ● | ● | ● | | |
+| Premium snapshot (monthly) | ● | ● | ● | ● | ● | ● | | |
+| Claim transactions | ● | ● | ● | ● | ● | ● | ● | ● |
+| Claims pipeline | ● | ● | ● | ● | ● | | ● | ● |
+
+## The three fact types together
+
+| Fact | Type | Grain | Facts |
+|---|---|---|---|
+| `fct_policy_transactions` | Transaction | policy coverage transaction (new, endorse, renew, cancel) | premium change amount |
+| `fct_premium_monthly` | Periodic snapshot | policy coverage × month | written premium, earned premium (additive per month), in-force flag |
+| `fct_claim_transactions` | Transaction | claim transaction (reserve, payment, recovery) | amount by transaction type |
+| `fct_claim_pipeline` | Accumulating snapshot | claim | first notice, assigned, inspected, reserved, settled, closed dates; lags; totals to date |
+
+## Techniques this industry forces
+
+- **Heterogeneous products** (auto vs home coverages have different attributes: VIN, model year vs construction
+  type, roof age). Use **supertype/subtype**: a core coverage and covered-item dimension, plus auto- and
+  home-specific subtype dimensions and facts.
+- **Policyholder mini-dimension** for volatile rating attributes (credit band, claims-history band, risk score
+  band).
+- **Timespan tracking:** coverage is in force over an interval. A policy-coverage fact row with
+  `effective_date` / `expiration_date` answers "in force as of any date" with a range predicate.
+- **Role-playing date and party dimensions:** transaction date, effective date; policyholder vs claimant vs
+  third party.
+
+```sql
+-- Policies in force on a date, via timespan tracking
+select count(distinct policy_key)
+from fct_policy_coverage_timespans
+where '2026-06-30'::date >= coverage_effective_date
+  and '2026-06-30'::date <  coverage_expiration_date;
+```
+
+## Exercise
+
+<details>
+<summary>Actuaries want <strong>loss ratio</strong> (incurred losses ÷ earned premium) by line of business and accident year. Which tables, and how?</summary>
+
+Earned premium from `fct_premium_monthly` (sum by line of business and year). Incurred losses from
+`fct_claim_transactions` (payments + reserve changes, by line of business and the claim's **accident date** year,
+a role-playing date). Aggregate each separately to line × year (**drill-across**), then divide. Never store the
+ratio in a fact.
+</details>

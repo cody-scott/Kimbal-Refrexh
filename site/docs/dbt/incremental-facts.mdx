@@ -1,0 +1,81 @@
+---
+title: Incremental fact tables
+description: Strategies for loading large fact tables incrementally on Snowflake with dbt, with late data, lookbacks and full refreshes.
+sidebar_position: 3
+---
+
+# Incremental fact tables
+
+<KimballRef chapters={[19, 20]} techniques={['Transaction Fact Tables', 'Late Arriving Facts']}>
+Kimball's "fact table builders" subsystem (Ch. 19) distinguishes transaction, periodic snapshot and
+accumulating snapshot loading. Each maps to a different incremental pattern.
+</KimballRef>
+
+## Choosing a strategy (Snowflake)
+
+| Strategy | Snowflake SQL | Good for | Watch out for |
+|---|---|---|---|
+| `append` | `insert into` | Immutable events with no reprocessing | Reruns duplicate rows |
+| `merge` (default) | `merge into ... on unique_key` | Transaction facts with a lookback window; accumulating snapshots | MERGE scans the target; use `incremental_predicates` on large tables |
+| `delete+insert` | `delete` matching keys, then `insert` | Replacing whole periods (a day, a month) | Key must identify the whole replaced set |
+| `microbatch` (dbt 1.9+) | Per-batch `delete+insert` by `event_time` | Very large time-series facts; backfills by date range | Needs an `event_time` column and the batch size configured |
+
+By fact type:
+
+| Fact type | Typical pattern |
+|---|---|
+| Transaction | `merge` on the grain + lookback; or `microbatch` on the event date |
+| Periodic snapshot | `delete+insert` (or `merge`) on snapshot period: rebuild the latest period(s) |
+| Accumulating snapshot | `merge` on the instance key, selecting instances with new milestone events |
+
+## The lab's transaction fact
+
+<DbtFile path="models/marts/retail/fct_retail_sales.sql" lines={[1, 33]} />
+
+### Make it cheaper: incremental predicates
+
+On a large fact, `merge` scans the whole target to find matches. Restrict it:
+
+```sql
+{{ config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key=['transaction_id', 'line_number'],
+    incremental_predicates=["DBT_INTERNAL_DEST.transaction_date >= dateadd(day, -7, current_date)"],
+    cluster_by=['date_key']
+) }}
+```
+
+### Or use microbatch
+
+```sql
+{{ config(
+    materialized='incremental',
+    incremental_strategy='microbatch',
+    event_time='transaction_ts',
+    batch_size='day',
+    lookback=3,
+    begin='2025-01-01'
+) }}
+-- No is_incremental() block: dbt filters upstream refs with event_time automatically
+```
+
+Then backfill a range with `dbt run -s fct_retail_sales --event-time-start 2025-03-01 --event-time-end 2025-03-31`.
+
+## Rules for correct incremental facts
+
+1. **`unique_key` = the grain.** Anything else silently loses or duplicates rows.
+2. **Every reprocessed row is fully recomputed.** Dimension keys are re-resolved too, so late Type 2 changes
+   inside the window are picked up.
+3. **Lookback ≥ real lateness.** Measure source latency; don't guess.
+4. **Full refresh must give the same result** as the incremental history. If it doesn't (because it depends on
+   snapshot state or on the time it runs), you have a hidden bug.
+5. **Dimension changes outside the window** aren't propagated until a full refresh. Schedule periodic full
+   refreshes, or widen the window, if backdated dimension changes matter.
+6. **Schema changes:** `on_schema_change='append_new_columns'` adds new fact columns without a rebuild, but
+   historical rows get nulls until you backfill.
+
+<Quiz questions={[
+  {question: 'Your incremental fact uses unique_key = transaction_id, but the grain is transaction line. What happens on a merge?', options: ['Nothing; it works', 'Multiple lines of a ticket collide on one key, so rows are lost or the merge errors on duplicates', 'Snowflake adds line numbers', 'It becomes append-only'], answer: 1, explanation: 'The merge key must match the grain exactly; a coarser key collapses rows (Snowflake errors on nondeterministic merges, or data is lost).'},
+  {question: 'Which strategy fits a daily periodic snapshot best?', options: ['append', 'delete+insert by snapshot date (or merge on the grain)', 'microbatch only', 'No strategy; always full refresh'], answer: 1, explanation: 'Rebuilding the latest period(s) in place is idempotent and simple for snapshots.'},
+]} />

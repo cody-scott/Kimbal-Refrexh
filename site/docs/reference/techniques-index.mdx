@@ -1,0 +1,144 @@
+---
+title: Kimball techniques index
+sidebar_label: Techniques index
+description: Every technique in the Kimball Group's dimensional modeling techniques list, mapped to lessons, lab models and book chapters.
+sidebar_position: 1
+hide_progress: true
+---
+
+# Kimball techniques index
+
+The Kimball Group publishes an official list of
+[dimensional modeling techniques](https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/),
+which Chapter 2 of *The Data Warehouse Toolkit* (3rd ed.) summarizes. This index maps each one to where it's taught
+here and where it appears in the lab. Chapter numbers refer to the 3rd edition; Ch. 2 covers every technique in
+summary form.
+
+## Fundamental concepts
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Gather business requirements and data realities | [Requirements & workshops](/foundations/requirements-and-workshops) | staging tests | 1, 18 |
+| Collaborative dimensional modeling workshops | [Requirements & workshops](/foundations/requirements-and-workshops) | | 18 |
+| Four-step dimensional design process | [Four-step process](/foundations/four-step-process) | `fct_retail_sales` header | 3 |
+| Business processes | [Four-step process](/foundations/four-step-process) | | 3 |
+| Grain | [Declaring the grain](/foundations/declaring-the-grain) | grain tests | 3, 4 |
+| Dimensions for descriptive context | [Anatomy](/foundations/star-schema-anatomy) | `dim_*` | 1, 3 |
+| Facts for measurements | [Anatomy](/foundations/star-schema-anatomy) | `fct_*` | 1, 3 |
+| Star schemas and OLAP cubes | [Why dimensional modeling](/foundations/why-dimensional-modeling) | | 1 |
+| Graceful extensions to dimensional models | [Anatomy](/foundations/star-schema-anatomy#graceful-extensions) | | 3 |
+
+## Basic fact table techniques
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Fact table structure | [Keys, nulls & hygiene](/facts/keys-nulls-and-hygiene) | | 3 |
+| Additive, semi-additive, non-additive facts | [Additivity](/facts/additivity) | inventory, GL balances | 3, 4 |
+| Nulls in fact tables | [Keys, nulls & hygiene](/facts/keys-nulls-and-hygiene) | `dim_key()` | 3 |
+| Conformed facts | [Conformed facts & drill-across](/bus/conformed-facts-and-drill-across) | | 4 |
+| Transaction fact tables | [Transaction facts](/facts/transaction-fact-tables) | `fct_retail_sales` | 3, 6 |
+| Periodic snapshot fact tables | [Periodic snapshots](/facts/periodic-snapshot-fact-tables) | `fct_inventory_daily_snapshot` | 4, 7 |
+| Accumulating snapshot fact tables | [Accumulating snapshots](/facts/accumulating-snapshot-fact-tables) | `fct_po_line_pipeline` | 4, 6 |
+| Factless fact tables | [Factless facts](/facts/factless-fact-tables) | `fct_promotion_coverage` | 3, 13 |
+| Aggregate fact tables or OLAP cubes | [Aggregates](/advanced/aggregates-and-shrunken-dimensions) | `agg_sales_monthly_category_store` | 4, 19 |
+| Consolidated fact tables | [Consolidated facts](/advanced/consolidated-fact-tables) | `fct_budget_vs_actual` | 7 |
+
+## Basic dimension table techniques
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Dimension table structure | [Anatomy](/foundations/star-schema-anatomy) | | 3 |
+| Dimension surrogate keys | [Surrogate keys](/dimensions/surrogate-keys) | every `*_key` | 3 |
+| Natural, durable, and supernatural keys | [Surrogate keys](/dimensions/surrogate-keys) | `*_durable_key` | 3 |
+| Drilling down | [Attributes & hierarchies](/dimensions/attributes-and-hierarchies) | | 3 |
+| Degenerate dimensions | [Degenerate dimensions](/dimensions/degenerate-dimensions) | `transaction_id` | 3, 6 |
+| Denormalized flattened dimensions | [Attributes & hierarchies](/dimensions/attributes-and-hierarchies) | `dim_product` | 3 |
+| Multiple hierarchies in dimensions | [Attributes & hierarchies](/dimensions/attributes-and-hierarchies#multiple-hierarchies) | `dim_store` | 3 |
+| Flags and indicators as textual attributes | [Attributes & hierarchies](/dimensions/attributes-and-hierarchies#flags-and-indicators-as-text) | `dim_date` | 3 |
+| Null attributes in dimensions | [Attributes & hierarchies](/dimensions/attributes-and-hierarchies#null-attributes) | | 3 |
+| Calendar date dimensions | [Date dimension](/dimensions/date-dimension) | `dim_date` | 3 |
+| Role-playing dimensions | [Role-playing](/dimensions/role-playing-dimensions) | `dim_ship_date` | 6 |
+| Junk dimensions | [Junk dimensions](/dimensions/junk-dimensions) | `dim_order_profile` | 6 |
+| Snowflaked dimensions | [Snowflaking & outriggers](/dimensions/outriggers-and-snowflaking) | | 3 |
+| Outrigger dimensions | [Snowflaking & outriggers](/dimensions/outriggers-and-snowflaking#outriggers) | | 3 |
+
+## Integration via conformed dimensions
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Conformed dimensions | [Conformed dimensions](/dimensions/conformed-dimensions) | `marts/core` | 4 |
+| Shrunken dimensions | [Conformed & shrunken](/dimensions/conformed-dimensions#shrunken-dimensions) | `dim_month` | 4 |
+| Drilling across | [Drill-across](/bus/conformed-facts-and-drill-across) | `drill_across_sales_vs_inventory` | 4 |
+| Value chain | [Value chain](/bus/value-chain-and-roadmap) | | 4 |
+| Enterprise data warehouse bus architecture | [Module 5](/bus) | | 4 |
+| Enterprise data warehouse bus matrix | [Bus matrix](/bus/bus-matrix) | | 4, 5 |
+| Detailed implementation bus matrix | [Bus matrix](/bus/bus-matrix#the-detailed-implementation-bus-matrix) | | 4 |
+| Opportunity/stakeholder matrix | [Bus matrix](/bus/bus-matrix#opportunitystakeholder-matrix) | | 4 |
+
+## Dealing with slowly changing dimension attributes
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Type 0: Retain original | [Types 0 & 1](/scd/types-0-and-1) | `scd_type0_product` | 5 |
+| Type 1: Overwrite | [Types 0 & 1](/scd/types-0-and-1) | `scd_type1_product` | 5 |
+| Type 2: Add new row | [Type 2](/scd/type-2) | `dim_product` | 5 |
+| Type 3: Add new attribute | [Type 3](/scd/type-3) | `scd_type3_product` | 5 |
+| Type 4: Add mini-dimension | [Type 4](/scd/type-4-mini-dimensions) | `dim_customer_demographics` | 5 |
+| Type 5: Add mini-dimension and Type 1 outrigger | [Types 5–7](/scd/types-5-6-7) | `scd_type5_customer` | 5 |
+| Type 6: Add Type 1 attributes to Type 2 dimension | [Types 5–7](/scd/types-5-6-7) | `scd_type6_product` | 5 |
+| Type 7: Dual Type 1 and Type 2 dimensions | [Types 5–7](/scd/types-5-6-7) | `scd_type7_product_current` | 5 |
+
+## Dealing with dimension hierarchies
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Fixed depth positional hierarchies | [Attributes & hierarchies](/dimensions/attributes-and-hierarchies) | `dim_product` | 3, 7 |
+| Slightly ragged/variable depth hierarchies | [Ragged hierarchies](/advanced/ragged-and-recursive-hierarchies) | `dim_account` levels | 7 |
+| Ragged/variable depth hierarchies with hierarchy bridge tables | [Ragged hierarchies](/advanced/ragged-and-recursive-hierarchies) | `bridge_account_hierarchy` | 7, 9 |
+| Ragged/variable depth hierarchies with pathstring attributes | [Ragged hierarchies](/advanced/ragged-and-recursive-hierarchies#3-pathstrings) | `dim_account.hierarchy_path` | 7 |
+
+## Advanced fact table techniques
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Fact table surrogate keys | [Keys, nulls & hygiene](/facts/keys-nulls-and-hygiene#fact-table-surrogate-keys) | | 3 |
+| Centipede fact tables | [Keys, nulls & hygiene](/facts/keys-nulls-and-hygiene#centipede-fact-tables) | | 3 |
+| Numeric values as attributes or facts | [Keys, nulls & hygiene](/facts/keys-nulls-and-hygiene#numeric-values-fact-or-attribute) | `price_band` | 3 |
+| Lag/duration facts | [Accumulating snapshots](/facts/accumulating-snapshot-fact-tables) | `*_lag_days` | 4, 6 |
+| Header/line fact tables | [Header/line & allocation](/advanced/header-line-and-allocation) | `fct_order_lines` | 6 |
+| Allocated facts | [Header/line & allocation](/advanced/header-line-and-allocation) | `int_order_lines_allocated` | 6 |
+| Profit and loss fact tables using allocations | [Header/line & allocation](/advanced/header-line-and-allocation#profit--loss-facts) | | 6, 15 |
+| Multiple currency facts | [Currencies & units](/advanced/multiple-currencies-and-units) | `fct_order_lines` | 6, 7 |
+| Multiple units of measure facts | [Currencies & units](/advanced/multiple-currencies-and-units#multiple-units-of-measure) | | 6 |
+| Year-to-date facts | [More techniques](/advanced/more-techniques#year-to-date-facts) | | 7 |
+| Multipass SQL to avoid fact-to-fact table joins | [Consolidated facts](/advanced/consolidated-fact-tables) | analyses | 4 |
+| Timespan tracking in fact tables | [More techniques](/advanced/more-techniques#timespan-tracking-in-fact-tables) | | 8, 16 |
+| Late arriving facts | [Late-arriving data](/advanced/late-arriving-data) | lookback window | 19 |
+
+## Advanced dimension techniques
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Dimension-to-dimension table joins | [Snowflaking & outriggers](/dimensions/outriggers-and-snowflaking#dimension-to-dimension-joins) | | 8 |
+| Multivalued dimensions and bridge tables | [Bridges](/advanced/multivalued-dimensions-and-bridges) | `bridge_customer_interest` | 8, 10, 14 |
+| Time varying multivalued bridge tables | [Bridges](/advanced/multivalued-dimensions-and-bridges#time-varying-bridges) | | 8, 10 |
+| Behavior tag time series | [More techniques](/advanced/more-techniques#behavior-tag-time-series) | | 8 |
+| Behavior study groups | [More techniques](/advanced/more-techniques#behavior-study-groups) | | 8 |
+| Aggregated facts as dimension attributes | [More techniques](/advanced/more-techniques#aggregated-facts-as-dimension-attributes) | | 8 |
+| Dynamic value bands | [Type 4](/scd/type-4-mini-dimensions#dynamic-value-bands) | | 10 |
+| Text comments dimension | [More techniques](/advanced/more-techniques#text-comments-dimension) | | 9, 14 |
+| Multiple time zones | [Date dimension](/dimensions/date-dimension#multiple-time-zones) | | 12 |
+| Measure type dimensions | [More techniques](/advanced/more-techniques#measure-type-dimensions) | | 14 |
+| Step dimensions | [More techniques](/advanced/more-techniques#step-dimensions) | | 8, 15 |
+| Hot swappable dimensions | [More techniques](/advanced/more-techniques#hot-swappable-and-abstract-generic-dimensions) | | 10 |
+| Abstract generic dimensions | [More techniques](/advanced/more-techniques#hot-swappable-and-abstract-generic-dimensions) | | 2 |
+| Audit dimensions | [Audit & error events](/advanced/audit-dimension-and-error-events) | `dim_audit` | 6 |
+| Late arriving dimensions | [Special members](/dimensions/special-members#late-arriving-dimensions-inferred-members) | `dim_employee` | 19 |
+
+## Special purpose schemas
+
+| Technique | Lesson | Lab | DWT3 |
+|---|---|---|---|
+| Supertype and subtype schemas for heterogeneous products | [Supertype/subtype](/advanced/supertype-subtype) | | 10, 16 |
+| Real-time fact tables | [More techniques](/advanced/more-techniques#real-time-fact-tables) | | 19 |
+| Error event schemas | [Audit & error events](/advanced/audit-dimension-and-error-events#error-event-schemas) | `store_failures` | 19 |

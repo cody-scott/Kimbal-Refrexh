@@ -102,7 +102,10 @@ select
     s.quantity * s.unit_price - s.discount_amount                 as extended_net_sales_amount,
     s.quantity * s.unit_cost                                      as extended_cost_amount,
     s.quantity * s.unit_price - s.discount_amount
-        - s.quantity * s.unit_cost                                as extended_gross_profit_amount
+        - s.quantity * s.unit_cost                                as extended_gross_profit_amount,
+
+    -- Audit dimension: which dbt run wrote (or last re-merged) this row
+    '{{ invocation_id }}'                                         as audit_key
 from sales as s
 left join products as p
     on  p.sku = s.sku

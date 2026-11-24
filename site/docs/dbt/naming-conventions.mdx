@@ -1,0 +1,57 @@
+---
+title: Naming conventions
+description: Table and column naming for dimensional models in dbt, so the star documents itself.
+sidebar_position: 2
+---
+
+# Naming conventions
+
+<KimballRef chapters={[18]}>
+Kimball recommends establishing naming conventions during detailed design (Ch. 18): business-oriented,
+consistent, and documented.
+</KimballRef>
+
+Names are the first documentation anyone reads. The lab follows these conventions.
+
+## Models
+
+| Prefix | Meaning | Example |
+|---|---|---|
+| `stg_<source>__<entity>` | Staging (double underscore separates source from entity) | `stg_cascade__pos_transactions` |
+| `int_<entity>_<verb>` | Intermediate | `int_product_versions`, `int_order_lines_allocated` |
+| `dim_<entity>` | Dimension | `dim_product`, `dim_customer_demographics` |
+| `fct_<process>` | Fact (named for the business **process**) | `fct_retail_sales`, `fct_po_line_pipeline` |
+| `bridge_<a>_<b>` | Bridge table | `bridge_customer_interest` |
+| `agg_<process>_<grain>` | Aggregate fact | `agg_sales_monthly_category_store` |
+| `snap_<entity>` | dbt snapshot | `snap_products` |
+
+Name facts after **processes** (`fct_retail_sales`) rather than departments or reports (`fct_merch_dashboard`).
+
+## Columns
+
+| Pattern | Meaning | Example |
+|---|---|---|
+| `<entity>_key` | Surrogate key (PK of a dim, FK on a fact) | `product_key` |
+| `<role>_<entity>_key` | Role-playing FK | `ship_date_key`, `cashier_key` |
+| `<entity>_durable_key` | Durable key | `product_durable_key` |
+| `<entity>_id` / `_number` | Natural or business key | `customer_id`, `store_number`, `order_number` |
+| `extended_<x>_amount` | Additive monetary fact | `extended_net_sales_amount` |
+| `<x>_quantity`, `<x>_count` | Additive counts | `sales_quantity`, `received_count` |
+| `<x>_lag_days` | Duration fact | `order_to_ship_lag_days` |
+| `<x>_local` / `<x>_usd` | Currency-specific facts | `net_order_amount_local` |
+| `<x>_indicator` | Textual flag for users | `weekday_indicator` |
+| `is_<x>` | Boolean for SQL convenience | `is_current`, `is_inferred_member` |
+| `valid_from` / `valid_to` | Type 2 row validity | |
+| `<x>_band` | Banded numeric attribute | `price_band`, `age_band` |
+
+Prefer **business vocabulary** over source names: `store_region`, not `rgn_cd`. Rename in staging, once.
+
+## Attribute names unique across the star
+
+When attributes from several dimensions land in one query or wide table, generic names collide: `name`,
+`city`, `type`. Kimball's advice is to make them **unique and descriptive**, as in `store_city` vs `customer_city`,
+`promo_name` vs `product_name`. The lab's dimensions follow this.
+
+<Quiz questions={[
+  {question: 'Which column name best follows the conventions for the ship-date role on fct_order_lines?', options: ['date_key_2', 'ship_date_key', 'shipdate', 'dim_date_ship_fk'], answer: 1, explanation: '<role>_<entity>_key makes the role and the target dimension obvious.'},
+]} />

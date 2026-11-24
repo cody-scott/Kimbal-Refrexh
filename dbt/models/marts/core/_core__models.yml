@@ -84,6 +84,12 @@ models:
           arguments:
             natural_key: employee_id
 
+  - name: dim_audit
+    description: One row per dbt invocation that loaded facts (Kimball audit dimension). Append-only.
+    columns:
+      - name: audit_key
+        data_tests: [unique, not_null]
+
   - name: dim_vendor
     columns:
       - name: vendor_key

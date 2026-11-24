@@ -1,0 +1,76 @@
+---
+title: "Case study: Procurement"
+sidebar_label: Procurement
+description: Purchase-order transactions with a transaction-type dimension, a PO-line pipeline accumulating snapshot, and the SCD decisions for vendors and products.
+sidebar_position: 3
+---
+
+# Case study: Procurement
+
+<KimballRef chapters={[5]} techniques={['Transaction Fact Tables', 'Accumulating Snapshot Fact Tables', 'Type 1: Overwrite', 'Type 2: Add New Row']}>
+Kimball uses procurement to discuss single vs multiple transaction fact tables and to teach all the SCD types.
+</KimballRef>
+
+## The business
+
+Purchasing and finance ask:
+
+- How much did we order, receive, get invoiced for and pay, by vendor and product?
+- How long do vendors take to deliver? How quickly do we pay?
+- Which PO lines are stuck (received but not invoiced, invoiced but not paid)?
+
+## Design choice 1: one transaction fact or several?
+
+The source emits four transaction types per PO line: `PO_ISSUED`, `RECEIVED`, `INVOICED`, `PAID`.
+
+| Option | Pros | Cons |
+|---|---|---|
+| **One fact + transaction-type dimension** (the lab's `fct_procurement_transactions`) | Simple; easy to add new types; one place to query | Every query must filter by type; type-specific facts become sparse columns |
+| **One fact per type** (`fct_po_issued`, `fct_receipts`, …) | Each table has exactly its own facts and dimensions | More tables; cross-type analysis needs drill-across |
+
+Kimball's guidance: if the types share **the same dimensionality and the same facts**, one table with a type
+dimension is fine. If their dimensions or measures differ substantially (invoices carry tax and freight; receipts
+carry inspection results), separate them. Cascade's types share quantity and amount, so the lab uses one.
+
+<DbtFile path="models/marts/procurement/fct_procurement_transactions.sql" />
+
+## Design choice 2: add a pipeline view
+
+Velocity questions ("how long from issue to receipt?") are painful against transactions; they need a self-join per
+milestone. The **accumulating snapshot** pivots the milestones onto one row per PO line:
+
+<DbtFile path="models/marts/procurement/fct_po_line_pipeline.sql" collapsed />
+
+```sql
+-- Stuck lines: received more than 14 days ago, not yet invoiced
+select v.vendor_name, f.po_number, f.po_line_number, rd.full_date as received_on
+from fct_po_line_pipeline f
+join dim_vendor v on v.vendor_key = f.vendor_key
+join dim_date rd  on rd.date_key = f.received_date_key
+where f.pipeline_status = 'Received'
+  and rd.full_date < dateadd(day, -14, current_date);
+
+-- Vendor scorecard
+select v.vendor_name, v.sourcing_type,
+       avg(issued_to_received_lag_days) as avg_lead_time_days,
+       sum(received_quantity) / nullif(sum(ordered_quantity), 0) as fill_rate
+from fct_po_line_pipeline f
+join dim_vendor v on v.vendor_key = f.vendor_key
+group by all
+order by avg_lead_time_days desc;
+```
+
+## SCD decisions
+
+| Dimension | Attribute | Type | Why |
+|---|---|---|---|
+| Vendor | name | 1 | Corrections |
+| Vendor | country / sourcing type | 2 | Sourcing analysis "as was" (a vendor moving production changes tariffs) |
+| Product | category, brand | 2 | Shared with retail: conformed! |
+
+Because `dim_product` is conformed, the procurement fact uses the *same* product versions as retail sales, so
+"units bought vs units sold by category" drills across cleanly.
+
+<Quiz questions={[
+  {question: 'Invoices start carrying tax, freight and payment-terms measures that POs do not have. What does Kimball suggest?', options: ['Keep one table and add sparse columns', 'Consider separate fact tables per transaction type because the measures differ', 'Drop the new measures', 'Put them in the vendor dimension'], answer: 1, explanation: 'When dimensionality or measures diverge, separate fact tables avoid sparse, confusing columns.'},
+]} />

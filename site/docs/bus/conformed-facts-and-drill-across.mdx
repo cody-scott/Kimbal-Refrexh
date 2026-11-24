@@ -1,0 +1,88 @@
+---
+title: Conformed facts and drill-across
+description: Keeping fact definitions identical across processes, and safely combining measures from different fact tables.
+sidebar_position: 2
+---
+
+# Conformed facts and drill-across
+
+<KimballRef chapters={[4]} techniques={['Conformed Facts', 'Drilling Across', 'Multipass SQL to Avoid Fact-to-Fact Table Joins']} />
+
+## Conformed facts
+
+Dimensions aren't the only thing to conform. When the **same measure** appears in more than one fact table,
+its definition must be identical, or it must be named differently.
+
+| Measure | In | Must agree on |
+|---|---|---|
+| `net_sales` | `fct_retail_sales`, `fct_order_lines` | Discounts deducted? Tax excluded? Currency (USD)? |
+| `extended_cost_amount` / `extended_cost_usd` | retail and web | Standard vs actual cost |
+| `quantity` | sales, inventory, procurement | Unit of measure (eaches) |
+
+If two processes genuinely measure different things (say web "net sales" includes shipping revenue and store "net
+sales" doesn't), give them **different names**. Conformed facts are what let a combined "all-channel net sales"
+number be trusted.
+
+In dbt, the **semantic layer** is a natural place to define conformed metrics once:
+
+```yaml
+metrics:
+  - name: all_channel_net_sales_usd
+    type: derived
+    type_params:
+      expr: store_net_sales + web_net_sales_usd
+      metrics:
+        - name: net_sales          # from retail_sales semantic model
+          alias: store_net_sales
+        - name: web_net_sales_usd  # from an order_lines semantic model
+```
+
+## Drill-across
+
+Drilling across means querying **multiple fact tables** and combining the results through **conformed
+dimension attributes**. The safe pattern is always:
+
+1. aggregate each fact separately to the shared grain;
+2. full outer join the result sets on the conformed attributes.
+
+```sql
+-- All-channel sales by department and month: stores + web
+with store as (
+    select d.year_month, p.department, sum(f.extended_net_sales_amount) as store_net_sales
+    from fct_retail_sales f
+    join dim_date d    on d.date_key = f.date_key
+    join dim_product p on p.product_key = f.product_key
+    group by all
+),
+web as (
+    select d.year_month, p.department, sum(f.net_order_amount_usd) as web_net_sales_usd
+    from fct_order_lines f
+    join dim_date d    on d.date_key = f.order_date_key
+    join dim_product p on p.product_key = f.product_key
+    group by all
+)
+select
+    coalesce(s.year_month, w.year_month) as year_month,
+    coalesce(s.department, w.department) as department,
+    coalesce(s.store_net_sales, 0)       as store_net_sales,
+    coalesce(w.web_net_sales_usd, 0)     as web_net_sales_usd,
+    coalesce(s.store_net_sales, 0) + coalesce(w.web_net_sales_usd, 0) as all_channel_net_sales
+from store s
+full outer join web w using (year_month, department)
+order by 1, 2;
+```
+
+This works **only because** `dim_date` and `dim_product` are conformed: `year_month` and `department` mean the
+same thing in both CTEs.
+
+### What can go wrong
+
+| Symptom | Cause |
+|---|---|
+| Inflated totals | Joining fact tables directly (fan-out) instead of joining aggregated results |
+| Rows that don't match up | Non-conformed attributes ("Camping" vs "CAMPING", different fiscal calendars) |
+| Missing rows | Inner join instead of full outer: months with web sales but no store sales disappear |
+
+<Quiz questions={[
+  {question: 'Web "net sales" includes shipping revenue; store "net sales" does not. What should you do?', options: ['Sum them anyway', 'Rename one (or both) so the names reflect their different definitions, or conform the definitions', 'Average them', 'Put them in one fact table'], answer: 1, explanation: 'Conformed facts must share a definition; otherwise distinct names prevent misleading combinations.'},
+]} />

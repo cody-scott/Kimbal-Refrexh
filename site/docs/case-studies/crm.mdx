@@ -1,0 +1,90 @@
+---
+title: "Case study: Customer relationship management"
+sidebar_label: CRM
+description: A rich customer dimension with Type 2 history, a demographics mini-dimension, multivalued interests and behavior-based segments.
+sidebar_position: 6
+---
+
+# Case study: Customer relationship management
+
+<KimballRef chapters={[8]} techniques={['Type 2: Add New Row', 'Type 4: Add Mini-Dimension', 'Multivalued Dimensions and Bridge Tables', 'Aggregated Facts as Dimension Attributes', 'Behavior Tag Time Series', 'Behavior Study Groups', 'Step Dimensions', 'Timespan Tracking in Fact Tables']} />
+
+## The business
+
+Marketing asks:
+
+- Who are our customers: where they live, their loyalty tier, their demographic profile at the time of purchase?
+- Which interests drive spend? (Customers can have several.)
+- Which customers are high value, lapsing or new?
+- How do we follow one customer across stores and the web?
+
+## The customer "dimension family"
+
+| Model | Technique | Role |
+|---|---|---|
+| `dim_customer` | Type 2 (city, state, tier), durable key, special rows (`-1` unknown, `-2` anonymous) | The conformed customer |
+| `dim_customer_demographics` | Type 4 mini-dimension (age, income, tier bands) | Profile at time of each sale |
+| `scd_type5_customer` | Type 5 outrigger | Current profile without facts |
+| `bridge_customer_interest` + `dim_interest` | Multivalued bridge with weights | Interests |
+
+The **durable key** is what follows a customer across channels: retail sales and web orders both carry
+`customer_key`, which joins to `dim_customer`, and from there to `customer_durable_key`.
+
+## Behavior segments
+
+Kimball recommends turning behavior **facts** into **dimension attributes** that marketers can filter on.
+A sketch of an RFM (recency / frequency / monetary) segment model that would feed `dim_customer`:
+
+```sql
+-- models/intermediate/int_customer_rfm.sql (exercise)
+with activity as (
+    select c.customer_durable_key,
+           max(f.transaction_date)            as last_purchase_date,
+           count(distinct f.transaction_id)   as baskets_12m,
+           sum(f.extended_net_sales_amount)   as net_sales_12m
+    from {{ ref('fct_retail_sales') }} f
+    join {{ ref('dim_customer') }} c on c.customer_key = f.customer_key
+    where f.transaction_date > dateadd(month, -12, current_date)
+      and c.customer_id not in ('N/A', 'ANON')
+    group by 1
+)
+select
+    customer_durable_key,
+    case
+        when last_purchase_date >= dateadd(day, -30, current_date) and baskets_12m >= 6 then 'Champion'
+        when last_purchase_date >= dateadd(day, -90, current_date)                     then 'Active'
+        when last_purchase_date >= dateadd(day, -180, current_date)                    then 'At Risk'
+        else 'Lapsed'
+    end as rfm_segment,
+    case
+        when net_sales_12m >= 1000 then 'High Value ($1k+)'
+        when net_sales_12m >= 250  then 'Mid Value ($250-$999)'
+        else 'Low Value'
+    end as value_segment
+from activity
+```
+
+Store the monthly segment per customer in a narrow table (a **behavior tag time series**) to analyze migration:
+how many Champions in January were At Risk by June?
+
+## Answering the questions
+
+```sql
+-- Sales by customer state AT THE TIME of purchase (Type 2), loyalty members only
+select c.customer_state, c.loyalty_tier, sum(f.extended_net_sales_amount) as net_sales
+from fct_retail_sales f
+join dim_customer c on c.customer_key = f.customer_key
+where c.customer_id not in ('N/A', 'ANON')
+group by all
+order by 3 desc;
+
+-- Customers who moved during the period: compare their versions
+select customer_id, version_number, customer_city, loyalty_tier, valid_from, valid_to
+from dim_customer
+where customer_id in (select customer_id from dim_customer where version_number > 1)
+order by customer_id, version_number;
+```
+
+<Quiz questions={[
+  {question: 'Which key lets you count distinct customers across their Type 2 versions?', options: ['customer_key', 'customer_durable_key (or the natural customer_id)', 'customer_demographics_key', 'interest_key'], answer: 1, explanation: 'customer_key identifies versions; the durable key identifies the person.'},
+]} />

@@ -1,0 +1,7 @@
+# Lab + CI toolchain. For Snowflake only you need the first two lines.
+dbt-core==1.10.23
+dbt-snowflake==1.10.8
+# CI smoke test (compile on DuckDB, transpile with sqlglot, run the DAG offline)
+dbt-duckdb==1.10.1
+duckdb==2.0.1
+sqlglot==30.34.0

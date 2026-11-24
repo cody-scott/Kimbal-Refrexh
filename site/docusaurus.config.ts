@@ -93,7 +93,7 @@ const config: Config = {
           items: [
             {label: 'Start here', to: '/'},
             {label: 'Four-step process', to: '/foundations/four-step-process'},
-            {label: 'Kimball in dbt', to: '/dbt/index'},
+            {label: 'Kimball in dbt', to: '/dbt'},
           ],
         },
         {

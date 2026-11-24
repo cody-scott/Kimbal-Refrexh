@@ -1,0 +1,72 @@
+---
+title: "Case study: Education (design)"
+sidebar_label: Education
+description: An applicant pipeline accumulating snapshot and factless registration and attendance facts for a university.
+sidebar_position: 10
+---
+
+# Case study: Education (design)
+
+<KimballRef chapters={[13]} techniques={['Accumulating Snapshot Fact Tables', 'Factless Fact Tables', 'Lag/Duration Facts']} />
+
+*Not built in the lab. Treat it as a design exercise with a worked answer.*
+
+## The business
+
+A university wants to understand admissions funnel conversion, course enrollment and student attendance.
+
+## 1. Applicant pipeline: accumulating snapshot
+
+- **Grain:** one row per application.
+- **Dates:** inquiry, application submitted, application complete, admission decision, deposit paid, enrolled
+  (each `Not Yet Happened` until reached).
+- **Dimensions:** applicant, program, term, admissions officer, source (fair, web, referral), decision
+  (junk dimension: decision type, scholarship flag, early decision).
+- **Facts:** counters per milestone, lags (submitted→decision, decision→deposit), scholarship offered amount.
+
+```sql
+-- Funnel conversion by program for the Fall 2026 term
+select p.program_name,
+       sum(applied_count)  as applied,
+       sum(admitted_count) as admitted,
+       sum(deposit_count)  as deposited,
+       sum(enrolled_count) as enrolled,
+       round(sum(enrolled_count) / nullif(sum(admitted_count), 0), 3) as yield
+from fct_application_pipeline f
+join dim_program p on p.program_key = f.program_key
+join dim_term t    on t.term_key = f.term_key
+where t.term_name = 'Fall 2026'
+group by 1;
+```
+
+## 2. Registration: factless coverage
+
+- **Grain:** one row per student per course section per term registered.
+- No measures, or a counter plus credit hours (additive).
+
+## 3. Attendance: factless event tracking
+
+- **Grain:** one row per student per class session attended.
+- "Registered but never attended" = registration **minus** attendance, the coverage pattern from
+  [factless facts](/facts/factless-fact-tables).
+
+```sql
+select st.student_id, c.course_code
+from fct_registration r
+join dim_student st on st.student_key = r.student_key
+join dim_course c   on c.course_key = r.course_key
+where not exists (
+    select 1 from fct_attendance a
+    where a.student_key = r.student_key and a.course_section_key = r.course_section_key
+);
+```
+
+## Exercise
+
+<details>
+<summary>Facilities wants classroom utilization (hours booked ÷ hours available). What do you build?</summary>
+
+A **factless (or counter) fact of room bookings** at room × time-slot × date grain, plus a **room availability
+coverage** table at the same grain. Utilization = booked slots ÷ available slots, both aggregated separately to
+room × week, then divided.
+</details>

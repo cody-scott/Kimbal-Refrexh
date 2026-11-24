@@ -1,0 +1,118 @@
+---
+title: The bus matrix
+description: Cascade Outfitters' enterprise bus matrix, how to build one, and how it maps onto a dbt project and roadmap.
+sidebar_position: 1
+---
+
+# The bus matrix
+
+<KimballRef chapters={[4, 5, 9, 13, 18]} techniques={['Enterprise Data Warehouse Bus Matrix', 'Detailed Implementation Bus Matrix', 'Opportunity/Stakeholder Matrix']}>
+The bus matrix is introduced with the retail value chain (Ch. 4) and built for nearly every industry case study
+after it.
+</KimballRef>
+
+The **bus matrix** is the single most useful planning artifact in Kimball's method:
+
+- **Rows** are **business processes** (each becomes one or more fact tables).
+- **Columns** are **conformed dimensions**.
+- A mark means "this process uses this dimension".
+
+It fits on one page, business people understand it, and it's simultaneously the architecture, the integration
+plan and the roadmap.
+
+## Cascade Outfitters' bus matrix
+
+| Business process | Date | Product | Store | Customer | Promotion | Employee | Vendor | Account | Currency |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Retail sales (POS) | ● | ● | ● | ● | ● | ● | | | |
+| Promotion coverage | ● | ● | ● | | ● | | | | |
+| Store inventory (snapshot & movements) | ● | ● | ● | | | | | | |
+| Procurement (PO transactions & pipeline) | ● | ● | | | | | ● | | |
+| Web orders & fulfillment | ● | ● | ● | ● | | | | | ● |
+| General ledger (journal & balances) | ● | | ● | | | | | ● | |
+| Budget vs actual | ● | | | | | | | ● | |
+| HR events & headcount | ● | | ● | | | ● | | | |
+| *Planned: customer returns* | ● | ● | ● | ● | | ● | | | ● |
+| *Planned: email campaigns* | ● | ● | | ● | ● | | | | |
+
+## Reading the matrix
+
+- **Columns with many marks** (Date, Product, Store, Customer) are the most important dimensions to get right and
+  conform early. In dbt these live in `models/marts/core/`.
+- **Each row is a project.** Kimball recommends delivering the warehouse process by process, prioritized by
+  business value and feasibility, each one reusing the columns already built.
+- **Drill-across opportunities** are any two rows sharing marked columns: sales vs inventory by product and store,
+  orders vs returns by customer.
+
+## The detailed implementation bus matrix
+
+The high-level matrix has one row per process. The **detailed** version has one row per **fact table**, with
+its grain and its facts, and shows the dimension *roles*:
+
+| Fact table | Grain | Date roles | Other dimensions | Facts |
+|---|---|---|---|---|
+| `fct_retail_sales` | POS ticket line | sale | product, store, customer, demographics, promotion, cashier (employee) | qty, gross, discount, net, cost, GP |
+| `fct_promotion_coverage` | product × store × day × promotion | coverage | product, store, promotion | (factless) |
+| `fct_inventory_daily_snapshot` | product × store × day | snapshot | product, store | on hand, value at cost / list |
+| `fct_inventory_transactions` | movement | movement | product, store, movement type | qty change, value change |
+| `fct_procurement_transactions` | PO line transaction | transaction | product, vendor, txn type | qty, amount |
+| `fct_po_line_pipeline` | PO line | issued, received, invoiced, paid | product, vendor | ordered/received qty, lags, counts |
+| `fct_order_lines` | web order line | order, ship | product, customer, order profile, currency, store | qty, gross/discount/net (local & USD), allocated shipping, cost |
+| `fct_order_fulfillment` | web order | order, ship, delivery, return | customer, order profile | qty, net USD, lags, counts |
+| `fct_gl_journal_lines` | journal line | posting | account, store | amount, signed amount |
+| `fct_gl_monthly_balance` | account × store × month | month end | account, store | activity, ending balance |
+| `fct_budget_vs_actual` | account × month | month end | account | actual, budget, variance |
+| `fct_employee_events` | HR event | event | employee, store | hire/term/promo/transfer counts |
+| `fct_headcount_monthly` | employee × month end | month end | employee, store | headcount, tenure |
+
+## Opportunity/stakeholder matrix
+
+A companion matrix maps business processes (rows) to **stakeholder groups** (columns), so you can see who
+benefits from each row and prioritize:
+
+| Process | Merchandising | Store Ops | Finance | Marketing | HR | Supply Chain |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Retail sales | ● | ● | ● | ● | | |
+| Inventory | ● | ● | ● | | | ● |
+| Procurement | ● | | ● | | | ● |
+| Web orders | ● | | ● | ● | | ● |
+| General ledger | | | ● | | | |
+| HR | | ● | ● | | ● | |
+
+## From matrix to dbt project
+
+The matrix maps directly onto a dbt layout and its selectors:
+
+```text
+models/marts/
+├── core/          ← the matrix's columns (conformed dimensions)
+├── retail/        ← row: retail sales, promotion coverage
+├── inventory/     ← row: store inventory
+├── procurement/   ← row: procurement
+├── orders/        ← row: web orders & fulfillment
+├── accounting/    ← rows: GL, budget vs actual
+└── hr/            ← row: HR
+```
+
+```bash
+dbt build -s marts.core+          # rebuild every conformed dimension and everything downstream
+dbt build -s +marts.inventory     # deliver one "row", with everything it needs
+dbt ls -s dim_product+ --resource-type model   # impact analysis: who uses this column of the matrix?
+```
+
+<Quiz questions={[
+  {question: 'What are the rows and columns of Kimball\'s bus matrix?', options: ['Rows: tables; columns: columns', 'Rows: business processes; columns: conformed dimensions', 'Rows: departments; columns: reports', 'Rows: dates; columns: facts'], answer: 1, explanation: 'Processes (future fact tables) by conformed dimensions. Simple enough for business people, rigorous enough to architect from.'},
+  {question: 'Which dimension in Cascade\'s matrix is used by every process?', options: ['Product', 'Store', 'Date', 'Customer'], answer: 2, explanation: 'Every fact table has at least one date. Date is always the most-marked column.'},
+]} />
+
+## Exercise
+
+<details>
+<summary>Add a row for <strong>customer product reviews</strong> (customers write star ratings and text reviews of products, online or via post-purchase email). Which columns get marks, and what new dimensions appear?</summary>
+
+Marks: **Date** (review date; maybe also purchase date as a role), **Product**, **Customer**, **Store** (the Web
+Store or the store where the item was bought, if known). New dimensions: **review source / channel**
+(website, email, app), a **text comments dimension** for the review body, and possibly **review status**
+(published, moderated). Facts: star rating (1–5: average it, don't sum it), helpful votes (additive), plus a
+review count. Grain: one row per review.
+</details>

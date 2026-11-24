@@ -1,0 +1,77 @@
+---
+title: "Capstone: add customer returns"
+description: Design and build a new business process, customer returns, in the lab dbt project, end to end.
+sidebar_position: 5
+---
+
+# Capstone: add customer returns
+
+Add a new row to Cascade's [bus matrix](/bus/bus-matrix): **customer returns**. Work in your own branch of the lab
+project. This exercises nearly everything in the guide.
+
+## The requirements
+
+Merchandising and store operations want:
+
+1. Return rate (returned units ÷ sold units) by product category, month and **original** channel.
+2. Top return reasons by product and brand.
+3. Refund amounts and restocking fees by return store.
+4. Time from original purchase to return.
+5. Returns for promotions: are promoted items returned more?
+
+## Your tasks
+
+### 1. Data
+
+Extend `scripts/generate_seeds.py` to produce `raw_returns.csv`:
+
+| column | notes |
+|---|---|
+| `return_id`, `return_line_number` | |
+| `return_ts`, `return_store_id` | store returns in a store; mail returns → 999 |
+| `original_transaction_id`, `original_line_number` | for POS sales (nullable) |
+| `original_order_number`, `original_order_line` | for web sales (nullable) |
+| `sku`, `quantity`, `refund_amount`, `restocking_fee` | |
+| `reason_code`, `condition_code` | |
+
+Plus a small `raw_return_reasons.csv` (code, description, reason group).
+
+### 2. Design (write it down first)
+
+- Grain statement.
+- Dimensions, with roles: return date, original sale date, return store, original store/channel, product (which
+  version?), customer, return reason, return condition (junk), promotion of the original sale.
+- Facts and their additivity.
+- SCD decisions for the new dimensions.
+
+### 3. Build
+
+- `stg_cascade__returns`, `stg_cascade__return_reasons`
+- `dim_return_reason` (with reason group), `dim_return_condition` (junk)
+- `fct_returns`: incremental merge on the grain; resolve the **original** sale's keys by joining back to
+  `fct_retail_sales` / `fct_order_lines` via the degenerate dimensions
+- tests: grain, relationships, row-count reconciliation, a singular test that returned quantity never exceeds
+  the originally sold quantity
+
+### 4. Analyze
+
+- An analysis for return rate by category × month × original channel (drill-across: returns vs sales).
+- Semantic layer: a `returned_units` measure and a `return_rate` ratio metric.
+
+<details>
+<summary>Reference design</summary>
+
+- **Grain:** one row per returned product line.
+- **Keys:** `return_date_key`, `original_sale_date_key`, `return_store_key`, `original_store_key` (role-playing
+  `dim_store`), `product_key` = **the original sale's product version** (so return rates per category are consistent
+  with the sale), `product_durable_key`, `customer_key`, `promotion_key` (of the original sale),
+  `return_reason_key`, `return_condition_key`.
+- **Degenerates:** `return_id`, `return_line_number`, `original_transaction_id`, `original_line_number`,
+  `original_order_number`.
+- **Facts:** `returned_quantity`, `refund_amount`, `restocking_fee_amount` (additive),
+  `days_since_purchase` (a lag fact; average it).
+- **Unknown handling:** returns with no matching original sale (gift returns without a receipt) get
+  `original_*` keys of `-1` ("Unknown Original Sale"), or a dedicated "No Receipt" `-2` member, which is a
+  business case rather than an error.
+- **Return rate** in the semantic layer: `ratio(returned_units, sales_quantity)`, computed by drill-across, never stored.
+</details>

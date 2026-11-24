@@ -1,0 +1,73 @@
+---
+title: Kimball's ETL subsystems in dbt
+description: Kimball's 34 ETL subsystems mapped to dbt and Snowflake features, and to the lab project.
+sidebar_position: 8
+---
+
+# Kimball's ETL subsystems in dbt
+
+<KimballRef chapters={[19]}>
+Chapter 19 organizes everything an ETL system must do into 34 subsystems in four groups: extracting, cleaning
+and conforming, delivering, and managing. It's a useful checklist even when the tooling is dbt.
+</KimballRef>
+
+Many of the 34 subsystems are now provided by dbt, Snowflake or the loader. The mapping below is a
+checklist for "have we covered this?" in a dbt project.
+
+## Extracting
+
+| # | Subsystem | dbt / Snowflake / stack | In the lab |
+|---|---|---|---|
+| 1 | Data profiling | Exploratory queries, `dbt-profiler`, Snowsight column stats | staging tests encode findings |
+| 2 | Change data capture | Loader CDC (Fivetran, Airbyte), Snowflake Streams | `raw_*_changes` change logs |
+| 3 | Extract system | Loader / Snowpipe; `sources` + `dbt source freshness` | seeds |
+
+## Cleaning and conforming
+
+| # | Subsystem | dbt / Snowflake / stack | In the lab |
+|---|---|---|---|
+| 4 | Data cleansing | Staging models + tests (`accepted_values`, `not_null`) | `stg_cascade__*` |
+| 5 | Error event schema | `store_failures`, `run_results.json`, elementary | [audit & errors](/advanced/audit-dimension-and-error-events) |
+| 6 | Audit dimension assembler | `invocation_id` stamped on facts | `dim_audit` |
+| 7 | Deduplication | `qualify row_number() ...`, `dbt_utils.deduplicate` | `select distinct` in interests |
+| 8 | Conforming | Conformed dimension models in `marts/core`, mapping seeds | `dim_product`, `dim_store` |
+
+## Delivering
+
+| # | Subsystem | dbt / Snowflake / stack | In the lab |
+|---|---|---|---|
+| 9 | SCD manager | Snapshots; change-log macros | `snap_*`, `scd2_from_change_log` |
+| 10 | Surrogate key generator | `dbt_utils.generate_surrogate_key` | every `*_key` |
+| 11 | Hierarchy manager | Recursive CTEs, flattening | `dim_account`, `bridge_account_hierarchy` |
+| 12 | Special dimensions manager | Date spine, junk dims, unknown rows | `dim_date`, `dim_order_profile`, `unknown_member_row` |
+| 13 | Fact table builders | Incremental / table models per fact type | all `fct_` |
+| 14 | Surrogate key pipeline | Point-in-time joins + `coalesce` to unknown | `dim_key()` in facts |
+| 15 | Multivalued bridge builder | Bridge models with weights | `bridge_customer_interest` |
+| 16 | Late arriving data handler | Lookback windows, inferred members | `fct_retail_sales`, `dim_employee` |
+| 17 | Dimension manager | Owner of conformed dims: `group`/`access`, contracts | `marts/core` |
+| 18 | Fact provider | Teams owning fact models; exposures | `exposures.yml` |
+| 19 | Aggregate builder | `agg_` models, materialized/dynamic tables | `agg_sales_monthly_category_store` |
+| 20 | OLAP cube builder | Semantic layer / BI-tool cubes | `models/semantic` |
+| 21 | Data propagation manager | Reverse ETL, data shares, exports | (n/a) |
+
+## Managing
+
+| # | Subsystem | dbt / Snowflake / stack |
+|---|---|---|
+| 22 | Job scheduler | dbt Cloud jobs, Airflow, Dagster, GitHub Actions |
+| 23 | Backup system | Snowflake Time Travel, Fail-safe, zero-copy clones |
+| 24 | Recovery and restart | `dbt retry`, idempotent models |
+| 25 | Version control | git |
+| 26 | Version migration | CI/CD, deferral (`--defer --state`), Slim CI |
+| 27 | Workflow monitor | dbt Cloud run history, `run_results.json`, alerts |
+| 28 | Sorting | Clustering keys |
+| 29 | Lineage and dependency | dbt DAG, `dbt docs`, column-level lineage in dbt Cloud / catalogs |
+| 30 | Problem escalation | Test severities, alerting integrations |
+| 31 | Parallelizing / pipelining | dbt threads, Snowflake warehouse concurrency |
+| 32 | Security | Snowflake RBAC, masking policies, `grants` config |
+| 33 | Compliance | Access history, tags, retention policies |
+| 34 | Metadata repository | dbt manifest / catalog, data catalogs |
+
+<Quiz questions={[
+  {question: 'Which dbt feature most directly implements Kimball\'s "surrogate key pipeline"?', options: ['dbt docs', 'Point-in-time joins from facts to dimensions with fallback to unknown members', 'Seeds', 'Exposures'], answer: 1, explanation: 'The surrogate key pipeline replaces natural keys in incoming facts with the right dimension surrogate keys.'},
+]} />

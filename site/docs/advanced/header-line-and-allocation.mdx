@@ -1,0 +1,89 @@
+---
+title: Header/line facts and allocation
+description: Order headers vs lines, why header facts can't simply be repeated on lines, and allocating them down to the line grain.
+sidebar_position: 4
+---
+
+# Header/line facts and allocation
+
+<KimballRef chapters={[6, 15]} techniques={['Header/Line Fact Tables', 'Allocated Facts', 'Profit and Loss Fact Tables Using Allocations']}>
+Order Management (Ch. 6) covers header/line patterns and allocation; E-commerce (Ch. 15) builds a full
+profit-and-loss fact by allocating costs to the lowest grain.
+</KimballRef>
+
+Many transactions have a **header** (order, invoice, ticket) and **lines**. Some measurements belong to the
+header: shipping charge, order-level discount, tax, freight. How do they get into a line-grain fact table?
+
+## What not to do
+
+<Tabs>
+<TabItem value="repeat" label="✗ Repeat on every line">
+
+| order | line | product | net amount | shipping |
+|---|---|---|---|---|
+| 70001 | 1 | Tent | 349.00 | **15.00** |
+| 70001 | 2 | Stove | 79.00 | **15.00** |
+| 70001 | 3 | Fuel | 7.50 | **15.00** |
+
+`sum(shipping)` = 45.00, but the customer paid 15.00.
+
+</TabItem>
+<TabItem value="first" label="✗ First line only">
+
+| order | line | product | net amount | shipping |
+|---|---|---|---|---|
+| 70001 | 1 | Tent | 349.00 | **15.00** |
+| 70001 | 2 | Stove | 79.00 | 0 |
+| 70001 | 3 | Fuel | 7.50 | 0 |
+
+Totals are right, but "shipping by product" credits tents with all of it.
+
+</TabItem>
+<TabItem value="alloc" label="✓ Allocate">
+
+| order | line | product | net amount | allocated shipping |
+|---|---|---|---|---|
+| 70001 | 1 | Tent | 349.00 | 12.02 |
+| 70001 | 2 | Stove | 79.00 | 2.72 |
+| 70001 | 3 | Fuel | 7.50 | 0.26 |
+
+Sums to 15.00, and is spread in proportion to value.
+
+</TabItem>
+</Tabs>
+
+The two correct designs are:
+
+1. **Allocate** header facts down to lines, using a business-agreed rule.
+2. Keep a separate **header-grain fact table** for header facts (Kimball discusses both; many models do both).
+   The lab's `fct_order_fulfillment` is order-grain.
+
+## The lab's allocation
+
+<DbtFile path="models/intermediate/int_order_lines_allocated.sql" />
+
+Allocation details that matter in real projects:
+
+- **Allocation basis is a business decision**: by value (as here), by quantity, by weight (better for freight),
+  or equally. Document it.
+- **Rounding must tie out.** Rounding each share independently can leave the total a cent off. The lab gives the
+  remainder to the last line, and a singular test proves every order ties
+  (`tests/assert_order_lines_tie_to_headers.sql`). A unit test covers the 3-way split of $10.00 → 3.33 + 3.33 + 3.34:
+
+<DbtFile path="models/marts/orders/_orders__models.yml" lines={[30, 47]} title="_orders__models.yml (unit test)" />
+
+- **Zero-value orders** (all lines free): guard the division with `nullif(..., 0)` and decide a fallback, such as
+  equal split.
+
+## Profit & loss facts
+
+Taken to its conclusion, allocation lets you build a **P&L fact** at the atomic grain: revenue, then cost of goods,
+allocated shipping, allocated payment fees, allocated marketing cost and so on down to **net profit per order line**.
+Kimball notes this is among the most powerful and politically difficult tables to build, because every
+allocation rule is contested. Store each allocated component as its own fact, so users can see (and argue
+about) each one.
+
+<Quiz questions={[
+  {question: 'Why not repeat the order\'s shipping charge on every line?', options: ['It wastes storage', 'Summing it multiplies the charge by the number of lines', 'Snowflake rejects duplicate values', 'It is a degenerate dimension'], answer: 1, explanation: 'Header facts repeated at line grain are no longer additive and double count.'},
+  {question: 'Allocating $10.00 across 3 equal lines with rounding gives 3.33 + 3.33 + 3.33 = 9.99. What does the lab do?', options: ['Accept 9.99', 'Round up to 3.34 each', 'Assign the remaining cent to the last line', 'Store unrounded values only'], answer: 2, explanation: 'The last line absorbs the rounding remainder so the allocation ties exactly to the header.'},
+]} />

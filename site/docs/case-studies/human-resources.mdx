@@ -1,0 +1,87 @@
+---
+title: "Case study: Human resources"
+sidebar_label: Human resources
+description: Employee profile tracking with Type 2 change reasons, an HR events fact, a headcount snapshot, and a recursive reporting hierarchy.
+sidebar_position: 7
+---
+
+# Case study: Human resources
+
+<KimballRef chapters={[9]} techniques={['Type 2: Add New Row', 'Periodic Snapshot Fact Tables', 'Factless Fact Tables', 'Ragged/Variable Depth Hierarchies with Hierarchy Bridge Tables', 'Late Arriving Dimensions']} />
+
+## The business
+
+HR and store operations ask:
+
+- How many people work where, in what roles, at each month-end?
+- Hires, terminations, promotions and transfers by store and month.
+- Tenure distribution; who reports to whom (at any depth)?
+
+## Kimball's HR pattern: profile + events + snapshot
+
+| Model | Type | Grain |
+|---|---|---|
+| `dim_employee` | Type 2 with precise effective dates and **row change reason** | employee version |
+| `fct_employee_events` | Transaction (nearly factless, with counters) | HR event |
+| `fct_headcount_monthly` | Periodic snapshot | employee × month end |
+| `bridge_employee_reporting` | Recursive hierarchy bridge | manager × subordinate |
+
+<Tabs>
+<TabItem value="dim" label="dim_employee">
+<DbtFile path="models/marts/core/dim_employee.sql" />
+</TabItem>
+<TabItem value="ev" label="fct_employee_events">
+<DbtFile path="models/marts/hr/fct_employee_events.sql" />
+</TabItem>
+<TabItem value="hc" label="fct_headcount_monthly">
+<DbtFile path="models/marts/hr/fct_headcount_monthly.sql" />
+</TabItem>
+</Tabs>
+
+Note how each HR **event opens exactly one version** of the employee: the event fact joins to the dimension on
+`valid_from = event_date`. The dimension's `row_change_reason` and the event's `event_type` are the same fact
+seen from two angles.
+
+## Answering the questions
+
+```sql
+-- Month-end headcount by store and job title (semi-additive: never sum across months)
+select d.year_month, s.store_name, e.job_title, sum(h.headcount) as headcount
+from fct_headcount_monthly h
+join dim_date d     on d.date_key = h.month_end_date_key
+join dim_store s    on s.store_key = h.store_key
+join dim_employee e on e.employee_key = h.employee_key
+group by all
+order by 1, 2, 3;
+
+-- Turnover: terminations / average headcount, by quarter
+with terms as (
+    select d.calendar_year_quarter, sum(f.termination_count) as terminations
+    from fct_employee_events f join dim_date d on d.date_key = f.event_date_key
+    group by 1
+),
+hc as (
+    select calendar_year_quarter, avg(month_hc) as avg_headcount
+    from (
+        select d.calendar_year_quarter, d.year_month, sum(h.headcount) as month_hc
+        from fct_headcount_monthly h join dim_date d on d.date_key = h.month_end_date_key
+        group by all
+    )
+    group by 1
+)
+select hc.calendar_year_quarter, coalesce(t.terminations, 0) as terminations, hc.avg_headcount,
+       round(coalesce(t.terminations, 0) / hc.avg_headcount, 3) as turnover_rate
+from hc left join terms t on t.calendar_year_quarter = hc.calendar_year_quarter
+order by 1;
+
+-- Everyone in the Northwest regional director's (E004) organization
+select e.employee_name, e.job_title, b.levels_below
+from bridge_employee_reporting b
+join dim_employee e on e.employee_durable_key = b.subordinate_durable_key and e.is_current
+where b.manager_employee_id = 'E004'
+order by b.levels_below, e.employee_name;
+```
+
+<Quiz questions={[
+  {question: 'In Kimball\'s HR pattern, what does the periodic headcount snapshot answer that the events fact cannot easily answer?', options: ['How many people were hired', 'What the workforce looked like at each month-end', 'Who was promoted', 'Nothing'], answer: 1, explanation: 'Events record changes; the snapshot records state, which would otherwise require replaying every event.'},
+]} />

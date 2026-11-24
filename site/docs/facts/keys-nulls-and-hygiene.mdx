@@ -1,0 +1,83 @@
+---
+title: Keys, nulls and fact table hygiene
+description: Foreign keys, null handling, fact surrogate keys, centipede fact tables, and whether a number is a fact or an attribute.
+sidebar_position: 6
+---
+
+# Keys, nulls and fact table hygiene
+
+<KimballRef chapters={[2, 3, 6]} techniques={['Fact Table Structure', 'Nulls in Fact Tables', 'Fact Table Surrogate Keys', 'Centipede Fact Tables', 'Numeric Values as Attributes or Facts']} />
+
+## Foreign keys: never null
+
+Every fact row should join to every one of its dimensions. A null foreign key:
+
+- vanishes from `INNER JOIN` queries, so totals silently shrink;
+- shows as a blank group in BI tools;
+- makes the "why is this missing?" question impossible to answer.
+
+Instead, every dimension carries **special member rows**, and the fact points at the one that explains why:
+
+| Key | Member | Meaning |
+|---|---|---|
+| `'-1'` | Unknown | We expected a value but didn't get or couldn't match one (a data-quality problem) |
+| `'-2'` | Not applicable / Not yet happened / Anonymous | There legitimately is no value |
+
+In the lab, `dim_key()` applies the convention consistently:
+
+<DbtFile path="macros/dimensional.sql" />
+
+And the dimensions add the rows with `unknown_member_row()`:
+
+<DbtFile path="macros/get_unknown_member.sql" />
+
+Then a `not_null` + `relationships` test pair on each fact foreign key proves the convention holds.
+
+## Null facts: fine
+
+Null **measures** are acceptable and often correct: a lag that hasn't elapsed, a measurement not taken.
+`SUM`, `AVG` and `COUNT(col)` ignore nulls. Don't replace a null with zero unless zero is true: an *unknown*
+temperature isn't 0°.
+
+## Fact table surrogate keys
+
+Fact tables don't *need* a surrogate key; the grain's dimension keys and degenerates identify the row.
+Kimball notes a single-column fact key can help with:
+
+- identifying rows for incremental updates and deletes;
+- parent/child relationships between fact tables;
+- restarting interrupted loads.
+
+In dbt, a fact surrogate key is just `dbt_utils.generate_surrogate_key([...grain columns...])`. It's handy as a
+single `unique_key` for `merge`, but it's only as good as the grain columns it hashes.
+
+## Centipede fact tables
+
+A **centipede** has dozens of foreign keys, typically because every level of a hierarchy got its own
+dimension (`product_key`, `subcategory_key`, `category_key`, `department_key`, …) or a pile of tiny flag
+dimensions.
+
+Fixes:
+
+- Hierarchy levels go **inside** one dimension (flattened), not into separate keys.
+- Low-cardinality flags combine into a [junk dimension](/dimensions/junk-dimensions).
+- Ask whether two "dimensions" are really independent; if they're highly correlated, they might belong together.
+
+## Numeric values: fact or attribute?
+
+Some numbers could go either way, for example a product's list price, a store's square footage, or a customer's
+credit limit. Kimball's test:
+
+| If the value is mainly... | Model it as |
+|---|---|
+| used in calculations and aggregations, and **varies with each event** | a **fact** (e.g. the actual selling price on the sales line) |
+| used for **filtering, grouping, banding**, and fairly stable | a **dimension attribute** (e.g. `price_band`, `store_size_band`) |
+| both | **both**: the fact on the event, a banded attribute on the dimension |
+
+The lab does exactly that: `extended_gross_sales_amount` is a fact, while `dim_product.price_band` and
+`dim_store.store_size_band` are banded descriptive attributes.
+
+<Quiz questions={[
+  {question: 'A sale arrives with a promo code that is not in the promotion master. What should promotion_key be?', options: ['NULL', 'The unknown member key (-1)', 'The "No Promotion" key', 'Drop the row'], answer: 1, explanation: 'We expected a valid promotion and could not match it: that is "Unknown", a data issue worth monitoring. "No Promotion" is for sales that legitimately had none.'},
+  {question: 'A fact table has product_key, subcategory_key, category_key and department_key. What is the problem?', options: ['Nothing', 'It is a centipede: hierarchy levels should be attributes inside dim_product', 'It should be snowflaked', 'It needs a fact surrogate key'], answer: 1, explanation: 'Hierarchy levels belong flattened in the product dimension; separate keys bloat the fact and invite inconsistency.'},
+]} />

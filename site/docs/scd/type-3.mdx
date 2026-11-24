@@ -1,0 +1,55 @@
+---
+title: "Type 3: add new attribute"
+sidebar_label: "Type 3: add new attribute"
+description: Keep a prior value alongside the current one, for "alternate reality" reporting after a reorganization.
+sidebar_position: 3
+---
+
+# Type 3: add new attribute
+
+<KimballRef chapters={[5]} techniques={['Type 3: Add New Attribute']} />
+
+**Type 3** keeps one row per entity but adds a column for the **prior** value. Its purpose is narrow but real:
+after a reorganization, people want to see **all history under either the old or the new structure**, side
+by side.
+
+Classic example: sales territories are realigned on January 1. For a transition year, sales management wants
+every report available "by new territory" and "by old territory", across *all* historical data.
+
+## In the lab
+
+<DbtFile path="models/marts/scd_lab/scd_type3_product.sql" />
+
+| sku | current_category | prior_category | category_changed_at |
+|---|---|---|---|
+| SKU-2004 | Socks & Accessories | Footwear | 2025-03-01 09:00 |
+| SKU-1006 | Fuel & Consumables | Camp Kitchen | 2025-02-15 09:00 |
+| SKU-1001 | Tents | Tents | null |
+
+```sql
+-- All 2025 sales of the re-categorized products, under both structures
+select t3.current_category, t3.prior_category, sum(f.extended_net_sales_amount) as net_sales
+from fct_retail_sales f
+join scd_type7_product_current cur on cur.product_durable_key = f.product_durable_key
+join scd_type3_product t3          on t3.sku = cur.sku
+where t3.category_changed_at is not null
+group by all;
+```
+
+:::warning A subtle bug to avoid
+The tempting implementation is `lag(category) over (partition by sku order by valid_from)` on the current Type 2
+row. It's wrong whenever the latest version was opened by a change to a *different* attribute. SKU-1006's latest
+version comes from a package-size change, so `lag()` would report its prior category as unchanged. The
+model above first filters to versions where the category actually changed.
+:::
+
+## Limits
+
+- Only **one** prior value (or a fixed few: `category_2024`, `category_2023`…). It doesn't scale to frequent changes.
+- It's an **alternate view of all history**, not "as was" history. For "as was", use Type 2.
+- Best for **planned, infrequent, organization-wide** changes: reorgs, territory realignments, chart-of-accounts
+  restructures.
+
+<Quiz questions={[
+  {question: 'Which requirement suggests Type 3?', options: ['Show each sale under the category in force at the time', 'After a territory realignment, show all history by both old and new territories for a year', 'Track every change to customer income', 'Fix typos'], answer: 1, explanation: 'Type 3 supports alternate-reality reporting across all history for a planned structural change.'},
+]} />

@@ -1,0 +1,34 @@
+---
+title: "Module 1: Fact tables"
+sidebar_label: Overview
+description: The three fundamental fact table types, factless facts, additivity and fact-table design rules.
+sidebar_position: 0
+---
+
+# Module 1: Fact tables
+
+Fact tables are where the measurements live, and where most modeling mistakes do their damage: double
+counting, mixed grains and meaningless sums. This module covers what Kimball calls the *basic fact table
+techniques*.
+
+| Lesson | Kimball technique(s) | Lab model |
+|---|---|---|
+| [Additive, semi-additive and non-additive facts](/facts/additivity) | Additive, Semi-Additive, Non-Additive Facts | `fct_retail_sales`, `fct_inventory_daily_snapshot` |
+| [Transaction fact tables](/facts/transaction-fact-tables) | Transaction Fact Tables | `fct_retail_sales`, `fct_order_lines` |
+| [Periodic snapshot fact tables](/facts/periodic-snapshot-fact-tables) | Periodic Snapshot Fact Tables | `fct_inventory_daily_snapshot`, `fct_gl_monthly_balance` |
+| [Accumulating snapshot fact tables](/facts/accumulating-snapshot-fact-tables) | Accumulating Snapshot Fact Tables; Lag/Duration Facts | `fct_po_line_pipeline`, `fct_order_fulfillment` |
+| [Factless fact tables](/facts/factless-fact-tables) | Factless Fact Tables | `fct_promotion_coverage`, `fct_employee_events` |
+| [Keys, nulls and fact table hygiene](/facts/keys-nulls-and-hygiene) | Fact Table Structure; Nulls in Fact Tables; Fact Table Surrogate Keys; Centipede Fact Tables; Numeric Values as Attributes or Facts | all |
+
+## Comparing the three fundamental types
+
+| | Transaction | Periodic snapshot | Accumulating snapshot |
+|---|---|---|---|
+| Grain | One row per event | One row per entity per period | One row per process instance (pipeline) |
+| Date dimensions | One (the event date) | One (the snapshot period end) | Several, one per milestone |
+| Row count over time | Grows with activity | Grows predictably (entities × periods) | Grows with new instances |
+| Rows updated after insert? | No (insert-only) | No (once the period closes) | **Yes**, as milestones are reached |
+| Typical facts | Event amounts, quantities | Balances, levels (semi-additive), period totals | Lags, durations, milestone counts |
+| dbt materialization | `incremental` (append or merge) | `incremental` by period, or `table` | `table` or `incremental` with merge |
+
+<KimballRef chapters={[2, 3, 4]} techniques={['Transaction fact tables', 'Periodic snapshot fact tables', 'Accumulating snapshot fact tables', 'Factless fact tables']} />

@@ -1,0 +1,49 @@
+---
+title: Consolidated fact tables
+description: Pre-combining facts from multiple processes at a common grain (budget vs actual), and drill-across without fact-to-fact joins.
+sidebar_position: 7
+---
+
+# Consolidated fact tables
+
+<KimballRef chapters={[7]} techniques={['Consolidated Fact Tables', 'Multipass SQL to Avoid Fact-to-Fact Table Joins', 'Drilling Across']}>
+Budget vs actual in the Accounting chapter (Ch. 7) is the classic consolidated fact.
+</KimballRef>
+
+## Drill-across: the general technique
+
+To compare facts from two processes, Kimball's method (**multipass SQL**) is:
+
+1. query each fact table **separately**, aggregated to the same grain on conformed dimensions;
+2. **merge the result sets** on those conformed attributes (a full outer join).
+
+Never join two atomic fact tables directly on their dimension keys: the many-to-many relationship fans out
+and inflates both sides.
+
+```sql
+-- ✗ WRONG: each sale row matches each inventory row for the same product/store/day
+select sum(s.extended_net_sales_amount), sum(i.quantity_on_hand)
+from fct_retail_sales s
+join fct_inventory_daily_snapshot i
+  on i.product_key = s.product_key and i.store_key = s.store_key and i.date_key = s.date_key;
+```
+
+The correct version is in `analyses/drill_across_sales_vs_inventory.sql` (see
+[Periodic snapshots](/facts/periodic-snapshot-fact-tables#drill-across-to-combine-with-transactions)).
+
+## Consolidated fact tables
+
+When a particular drill-across is needed constantly, materialize it: a **consolidated fact table** holds facts
+from several processes at a common grain. The most common example is budget vs actual:
+
+<DbtFile path="models/marts/accounting/fct_budget_vs_actual.sql" />
+
+- **Common grain first.** Budgets exist per account per month, so actuals are rolled up to that grain.
+- **Full outer join** keeps budgeted-but-no-actuals and unbudgeted-actuals rows.
+- **Derived variance** is stored because everyone needs it. It's additive, since both components are.
+
+Other consolidated examples: actual vs forecast, sales vs returns by product-week, plan vs actual production.
+
+<Quiz questions={[
+  {question: 'What is the correct way to compare sales and inventory by product and month?', options: ['Join the two fact tables on product_key, store_key and date_key', 'Aggregate each fact separately to product x month, then join the results on the conformed attributes', 'Union the two tables', 'Put inventory columns on the sales fact'], answer: 1, explanation: 'Drill-across aggregates each process separately and merges the results, avoiding fan-out.'},
+]} />

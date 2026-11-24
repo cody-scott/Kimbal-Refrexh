@@ -1,0 +1,55 @@
+---
+title: Aggregates and shrunken dimensions
+description: Aggregate fact tables as a performance layer that must tie to the atomic facts, built with shrunken rollup dimensions.
+sidebar_position: 6
+---
+
+# Aggregates and shrunken dimensions
+
+<KimballRef chapters={[4, 19]} techniques={['Aggregate Fact Tables or OLAP Cubes', 'Shrunken Dimensions']}>
+Ch. 19 describes the "aggregate builder" subsystem.
+</KimballRef>
+
+An **aggregate fact table** pre-summarizes an atomic fact to a coarser grain (month × category × store instead of
+ticket line) so common queries scan fewer rows.
+
+Kimball's rules for aggregates:
+
+1. **They're a performance technique, not a modeling one.** The atomic fact is the model; aggregates are an
+   optimization.
+2. **They must return exactly the same answer** as the atomic data for the same question.
+3. **They use shrunken dimensions**, conformed rollups of the base dimensions, so users can drill from aggregate to
+   atomic seamlessly.
+4. Ideally users **don't know they exist**: a BI tool or semantic layer routes queries to them ("aggregate
+   navigation").
+
+## In the lab
+
+<DbtFile path="models/marts/aggregates/agg_sales_monthly_category_store.sql" />
+
+And a singular test enforces rule 2:
+
+<DbtFile path="tests/assert_aggregate_ties_to_atomic_fact.sql" />
+
+Note two decisions encoded in the model:
+
+- **Which category?** The aggregate uses the **current** category via the Type 7 durable key, so a product's history
+  rolls up under where it is today. Rolling up by historical category is equally valid, but it must be a
+  documented decision.
+- **`transaction_count` is a distinct count**: correct at the aggregate's grain, but not additive across
+  months or categories. Document it as such, or leave it out.
+
+## Do you need aggregates on Snowflake?
+
+Often not. Snowflake scans the atomic fact fast, especially clustered by date. Build aggregates when:
+
+- a dashboard runs constantly on the same rollup (warehouse credits add up);
+- the atomic fact is billions of rows and interactive latency matters;
+- a tool can't push down efficient SQL.
+
+Alternatives: Snowflake **materialized views** (single-table aggregates maintained automatically, with limits
+on joins), **dynamic tables**, and the dbt Semantic Layer's caching.
+
+<Quiz questions={[
+  {question: 'What must always be true of an aggregate fact table?', options: ['It is smaller than 1% of the atomic table', 'It returns the same results as the atomic fact for the same question', 'It uses its own dimensions', 'It replaces the atomic fact'], answer: 1, explanation: 'Aggregates are an optimization; any difference from the atomic answer is a bug.'},
+]} />

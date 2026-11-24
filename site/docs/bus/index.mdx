@@ -1,0 +1,23 @@
+---
+title: "Module 5: The enterprise bus"
+sidebar_label: Overview
+description: Kimball's bus architecture, bus matrix, conformed facts, drill-across and the value chain.
+sidebar_position: 0
+---
+
+# Module 5: The enterprise bus
+
+Individual stars are useful. A set of stars that **share conformed dimensions** is a data warehouse. The
+**enterprise data warehouse bus architecture** is Kimball's answer to "how do we build an integrated warehouse
+incrementally, one business process at a time, without a giant upfront enterprise model?"
+
+The metaphor: like a computer's bus, conformed dimensions are a **standard interface**. Any new business
+process "plugs in" by using the conformed dimensions, and is immediately comparable with everything else.
+
+| Lesson | Kimball technique(s) |
+|---|---|
+| [The bus matrix](/bus/bus-matrix) | Enterprise Data Warehouse Bus Matrix; Detailed Implementation Bus Matrix; Opportunity/Stakeholder Matrix |
+| [Conformed facts and drill-across](/bus/conformed-facts-and-drill-across) | Conformed Facts; Drilling Across; Multipass SQL |
+| [The value chain and the roadmap](/bus/value-chain-and-roadmap) | Value Chain; Enterprise Data Warehouse Bus Architecture |
+
+<KimballRef chapters={[4, 5, 17]} techniques={['Enterprise Data Warehouse Bus Architecture', 'Enterprise Data Warehouse Bus Matrix', 'Conformed Dimensions', 'Value Chain']} />
