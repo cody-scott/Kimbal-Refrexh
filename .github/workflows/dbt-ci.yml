@@ -2,10 +2,10 @@ name: dbt CI
 
 on:
   pull_request:
-    paths: ["dbt/**", ".github/workflows/dbt-ci.yml"]
+    paths: ["dbt/**", "knowledge/**", ".github/workflows/dbt-ci.yml"]
   push:
     branches: [main]
-    paths: ["dbt/**", ".github/workflows/dbt-ci.yml"]
+    paths: ["dbt/**", "knowledge/**", ".github/workflows/dbt-ci.yml"]
   workflow_dispatch:
 
 jobs:
@@ -51,3 +51,9 @@ jobs:
 
       - name: Smoke test (build DAG + run all data tests on DuckDB)
         run: python scripts/smoke_test_duckdb.py
+
+      - name: Knowledge base is current (lab catalog regenerated, references resolve)
+        run: |
+          python scripts/build_lab_catalog.py
+          git diff --exit-code -- ../knowledge/lab-catalog.md
+          python scripts/check_knowledge_refs.py
