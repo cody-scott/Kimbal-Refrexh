@@ -1,5 +1,8 @@
 # Kimball Refresh
 
+[![dbt CI](https://github.com/cody-scott/Kimbal-Refrexh/actions/workflows/dbt-ci.yml/badge.svg)](https://github.com/cody-scott/Kimbal-Refrexh/actions/workflows/dbt-ci.yml)
+[![Site](https://github.com/cody-scott/Kimbal-Refrexh/actions/workflows/deploy-site.yml/badge.svg)](https://github.com/cody-scott/Kimbal-Refrexh/actions/workflows/deploy-site.yml)
+
 A comprehensive study guide and teaching site for **dimensional modeling the Kimball way**, implemented in
 **dbt** on **Snowflake**.
 
